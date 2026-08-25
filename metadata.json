@@ -1,0 +1,6 @@
+{
+  "name": "Screenshot Stitcher",
+  "description": "複数のスクリーンショットや画像を自動で重複検出・結合して1枚のシームレスな長尺画像を作成するアプリ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

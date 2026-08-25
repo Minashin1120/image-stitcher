@@ -1,0 +1,51 @@
+package com.example.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Light Scheme Colors
+val PrimaryLight = Color(0xFF1E5BB8)
+val OnPrimaryLight = Color(0xFFFFFFFF)
+val PrimaryContainerLight = Color(0xFFD9E2FF)
+val OnPrimaryContainerLight = Color(0xFF001944)
+
+val SecondaryLight = Color(0xFF006874)
+val OnSecondaryLight = Color(0xFFFFFFFF)
+val SecondaryContainerLight = Color(0xFF97F0FF)
+val OnSecondaryContainerLight = Color(0xFF001F24)
+
+val TertiaryLight = Color(0xFF6750A4)
+val OnTertiaryLight = Color(0xFFFFFFFF)
+val TertiaryContainerLight = Color(0xFFE9DDFF)
+val OnTertiaryContainerLight = Color(0xFF22005D)
+
+val BackgroundLight = Color(0xFFF8F9FD)
+val OnBackgroundLight = Color(0xFF191C20)
+val SurfaceLight = Color(0xFFFFFFFF)
+val OnSurfaceLight = Color(0xFF191C20)
+val SurfaceVariantLight = Color(0xFFE1E2EC)
+val OnSurfaceVariantLight = Color(0xFF44474F)
+val OutlineLight = Color(0xFF757780)
+
+// Dark Scheme Colors
+val PrimaryDark = Color(0xFFAFC6FF)
+val OnPrimaryDark = Color(0xFF002D6C)
+val PrimaryContainerDark = Color(0xFF004397)
+val OnPrimaryContainerDark = Color(0xFFD9E2FF)
+
+val SecondaryDark = Color(0xFF4FD8EB)
+val OnSecondaryDark = Color(0xFF00363D)
+val SecondaryContainerDark = Color(0xFF004F58)
+val OnSecondaryContainerDark = Color(0xFF97F0FF)
+
+val TertiaryDark = Color(0xFFCFBCFF)
+val OnTertiaryDark = Color(0xFF381E72)
+val TertiaryContainerDark = Color(0xFF4F378B)
+val OnTertiaryContainerDark = Color(0xFFE9DDFF)
+
+val BackgroundDark = Color(0xFF111318)
+val OnBackgroundDark = Color(0xFFE2E2E9)
+val SurfaceDark = Color(0xFF191C20)
+val OnSurfaceDark = Color(0xFFE2E2E9)
+val SurfaceVariantDark = Color(0xFF44474F)
+val OnSurfaceVariantDark = Color(0xFFC5C6D0)
+val OutlineDark = Color(0xFF8E9099)
