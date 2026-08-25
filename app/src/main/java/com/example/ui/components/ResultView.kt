@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,10 @@ fun ResultView(
   var scale by remember { mutableFloatStateOf(1f) }
   var offset by remember { mutableStateOf(Offset.Zero) }
   var isEditing by remember { mutableStateOf(false) }
+
+  BackHandler(enabled = !isEditing) {
+    onBack()
+  }
 
   if (isEditing) {
     ImageEditorScreen(

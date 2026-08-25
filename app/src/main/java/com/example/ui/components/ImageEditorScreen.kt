@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -173,6 +174,16 @@ fun ImageEditorScreen(
   }
 
   val hasEdits = actionHistory.isNotEmpty() || !cropBounds.isDefault
+
+  BackHandler(enabled = true) {
+    if (showDiscardDialog) {
+      showDiscardDialog = false
+    } else if (hasEdits) {
+      showDiscardDialog = true
+    } else {
+      onDismiss()
+    }
+  }
 
   Scaffold(
     topBar = {
