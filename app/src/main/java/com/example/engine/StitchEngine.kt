@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
+import com.example.R
 import com.example.model.ImageItem
 import com.example.model.OutputFormat
 import com.example.model.SeamConfig
@@ -50,7 +51,7 @@ object StitchEngine {
       e.printStackTrace()
     }
 
-    val name = getFileName(context, uri) ?: "Screenshot"
+    val name = getFileName(context, uri) ?: context.getString(R.string.screenshot_default_name)
     return ImageItem(
       uri = uri,
       name = name,
@@ -93,18 +94,21 @@ object StitchEngine {
 
   /**
    * Decode full bitmap with memory protection.
+   * If maxWidth <= 0, decode at 100% original full resolution without downscaling.
    */
   suspend fun loadFullBitmap(context: Context, uri: Uri, maxWidth: Int = 2160): Bitmap? =
     withContext(Dispatchers.IO) {
       try {
         var sampleSize = 1
-        context.contentResolver.openInputStream(uri)?.use { stream ->
-          val options = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-          }
-          BitmapFactory.decodeStream(stream, null, options)
-          if (options.outWidth > maxWidth) {
-            sampleSize = (options.outWidth.toFloat() / maxWidth).roundToInt().coerceAtLeast(1)
+        if (maxWidth > 0) {
+          context.contentResolver.openInputStream(uri)?.use { stream ->
+            val options = BitmapFactory.Options().apply {
+              inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeStream(stream, null, options)
+            if (options.outWidth > maxWidth) {
+              sampleSize = (options.outWidth.toFloat() / maxWidth).roundToInt().coerceAtLeast(1)
+            }
           }
         }
 
@@ -348,13 +352,17 @@ object StitchEngine {
     }
 
     try {
-      onProgress(0.1f, "Loading screenshots...")
+      onProgress(0.1f, context.getString(R.string.progress_loading_screenshots))
 
       // Decode full bitmaps
+      val maxWidth = if (settings.preserveOriginalResolution) 0 else 2160
       val bitmaps = mutableListOf<Bitmap>()
       for (i in images.indices) {
-        onProgress(0.1f + 0.2f * (i.toFloat() / images.size), "Loading image ${i + 1} of ${images.size}...")
-        val bmp = loadFullBitmap(context, images[i].uri)
+        onProgress(
+          0.1f + 0.2f * (i.toFloat() / images.size),
+          context.getString(R.string.progress_loading_image, i + 1, images.size)
+        )
+        val bmp = loadFullBitmap(context, images[i].uri, maxWidth = maxWidth)
           ?: return@withContext Result.failure(IllegalStateException("Failed to load image: ${images[i].name}"))
         bitmaps.add(bmp)
       }
@@ -400,7 +408,10 @@ object StitchEngine {
         }
       }
 
-      onProgress(0.6f, "Composing ${targetWidth}x${totalHeight}px stitched canvas...")
+      onProgress(
+        0.6f,
+        context.getString(R.string.progress_composing_canvas, targetWidth, totalHeight)
+      )
 
       // Verify max height texture limit (safe bounds)
       val maxAllowedHeight = 32768
@@ -420,7 +431,10 @@ object StitchEngine {
       val globalScale = if (isScaled) maxAllowedHeight.toFloat() / totalHeight else 1f
 
       for ((index, op) in drawOperations.withIndex()) {
-        onProgress(0.6f + 0.25f * (index.toFloat() / drawOperations.size), "Rendering slice ${index + 1}...")
+        onProgress(
+          0.6f + 0.25f * (index.toFloat() / drawOperations.size),
+          context.getString(R.string.progress_rendering_slice, index + 1)
+        )
         val targetDst = if (isScaled) {
           Rect(
             (op.dstRect.left * globalScale).roundToInt(),
@@ -434,7 +448,7 @@ object StitchEngine {
         canvas.drawBitmap(op.bitmap, op.srcRect, targetDst, paint)
       }
 
-      onProgress(0.9f, "Saving stitched screenshot...")
+      onProgress(0.9f, context.getString(R.string.progress_saving_screenshot))
 
       val outputDir = File(context.cacheDir, "stitched").apply { mkdirs() }
       val fileName = "stitched_${System.currentTimeMillis()}.${settings.outputFormat.extension}"
@@ -459,7 +473,7 @@ object StitchEngine {
         totalOverlapRemoved = totalOverlapRemoved
       )
 
-      onProgress(1.0f, "Complete!")
+      onProgress(1.0f, context.getString(R.string.progress_complete))
       Result.success(result)
     } catch (e: Throwable) {
       e.printStackTrace()

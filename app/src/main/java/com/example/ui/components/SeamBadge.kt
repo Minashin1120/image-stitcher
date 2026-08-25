@@ -28,8 +28,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.model.SeamConfig
 import kotlin.math.roundToInt
 
@@ -82,15 +84,26 @@ fun SeamBadge(
 
         Column {
           Text(
-            text = if (hasOverlap) "Overlap: ${seam.totalOverlap}px" else "No Overlap Detected",
+            text = if (hasOverlap) {
+              stringResource(R.string.seam_overlap_px, seam.totalOverlap)
+            } else {
+              stringResource(R.string.seam_no_overlap)
+            },
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
           )
           if (seam.isAutoDetected && hasOverlap) {
+            val confidenceText = stringResource(
+              R.string.seam_match_confidence,
+              (seam.confidence * 100).roundToInt()
+            )
+            val manualOffsetSuffix = if (seam.manualOffset != 0) {
+              val offsetStr = if (seam.manualOffset > 0) "+${seam.manualOffset}" else "${seam.manualOffset}"
+              stringResource(R.string.seam_manual_offset_suffix, offsetStr)
+            } else ""
             Text(
-              text = "Match confidence ${(seam.confidence * 100).roundToInt()}%" +
-                if (seam.manualOffset != 0) " (Manual: ${if (seam.manualOffset > 0) "+${seam.manualOffset}" else "${seam.manualOffset}"}px)" else "",
+              text = "$confidenceText$manualOffsetSuffix",
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -106,7 +119,7 @@ fun SeamBadge(
         ) {
           Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
           Spacer(modifier = Modifier.width(4.dp))
-          Text("Adjust", style = MaterialTheme.typography.labelSmall)
+          Text(stringResource(R.string.btn_adjust), style = MaterialTheme.typography.labelSmall)
         }
       }
     }

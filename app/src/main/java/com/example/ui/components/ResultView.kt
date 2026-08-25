@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -46,10 +50,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.model.StitchResult
+import java.io.File
+import java.io.FileInputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,10 +65,41 @@ fun ResultView(
   result: StitchResult,
   onBack: () -> Unit,
   onSaveToGallery: () -> Unit,
-  onShare: () -> Unit
+  onShare: () -> Unit,
+  onResultUpdated: (StitchResult) -> Unit = {}
 ) {
   var scale by remember { mutableFloatStateOf(1f) }
   var offset by remember { mutableStateOf(Offset.Zero) }
+  var isEditing by remember { mutableStateOf(false) }
+
+  if (isEditing) {
+    ImageEditorScreen(
+      sourceFile = result.file,
+      fullBitmapLoader = {
+        try {
+          FileInputStream(result.file).use { stream ->
+            BitmapFactory.decodeStream(stream)
+          }
+        } catch (e: Exception) {
+          e.printStackTrace()
+          null
+        }
+      },
+      onDismiss = { isEditing = false },
+      onEditsApplied = { outFile, newWidth, newHeight, newSizeBytes ->
+        val updatedResult = result.copy(
+          uri = Uri.fromFile(outFile),
+          file = outFile,
+          width = newWidth,
+          height = newHeight,
+          fileSizeBytes = newSizeBytes
+        )
+        onResultUpdated(updatedResult)
+        isEditing = false
+      }
+    )
+    return
+  }
 
   Scaffold(
     topBar = {
@@ -68,12 +107,25 @@ fun ResultView(
         title = {
           Column {
             Text(
-              "Stitched Screenshot",
+              if (result.sourceCount > 1) stringResource(R.string.result_title) else stringResource(R.string.editor_title),
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold
             )
             Text(
-              "${result.width} × ${result.height} px • ${result.sourceCount} shots joined",
+              if (result.sourceCount > 1) {
+                stringResource(
+                  R.string.result_subtitle,
+                  result.width,
+                  result.height,
+                  result.sourceCount
+                )
+              } else {
+                stringResource(
+                  R.string.single_image_edit_result_subtitle,
+                  result.width,
+                  result.height
+                )
+              },
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -81,10 +133,22 @@ fun ResultView(
         },
         navigationIcon = {
           IconButton(onClick = onBack, modifier = Modifier.testTag("result_back_button")) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to editor")
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(R.string.cd_back_to_editor)
+            )
           }
         },
         actions = {
+          IconButton(
+            onClick = { isEditing = true },
+            modifier = Modifier.testTag("btn_open_image_editor")
+          ) {
+            Icon(
+              Icons.Default.Edit,
+              contentDescription = stringResource(R.string.cd_edit_image)
+            )
+          }
           IconButton(
             onClick = {
               scale = 1f
@@ -92,7 +156,10 @@ fun ResultView(
             },
             modifier = Modifier.testTag("btn_reset_zoom")
           ) {
-            Icon(Icons.Default.RestartAlt, contentDescription = "Reset Zoom")
+            Icon(
+              Icons.Default.RestartAlt,
+              contentDescription = stringResource(R.string.cd_reset_zoom)
+            )
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -143,7 +210,7 @@ fun ResultView(
                 color = MaterialTheme.colorScheme.tertiaryContainer
               ) {
                 Text(
-                  text = "-${result.totalOverlapRemoved}px overlap merged",
+                  text = stringResource(R.string.result_overlap_merged, result.totalOverlapRemoved),
                   style = MaterialTheme.typography.labelMedium,
                   color = MaterialTheme.colorScheme.onTertiaryContainer,
                   modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -157,8 +224,21 @@ fun ResultView(
           // Action Buttons
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
           ) {
+            OutlinedButton(
+              onClick = { isEditing = true },
+              modifier = Modifier
+                .weight(1f)
+                .height(48.dp)
+                .testTag("btn_bottom_edit_result"),
+              shape = RoundedCornerShape(12.dp)
+            ) {
+              Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(stringResource(R.string.btn_edit))
+            }
+
             FilledTonalButton(
               onClick = onShare,
               modifier = Modifier
@@ -168,21 +248,21 @@ fun ResultView(
               shape = RoundedCornerShape(12.dp)
             ) {
               Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Share")
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(stringResource(R.string.btn_share))
             }
 
             Button(
               onClick = onSaveToGallery,
               modifier = Modifier
-                .weight(1.5f)
+                .weight(1.3f)
                 .height(48.dp)
                 .testTag("btn_save_gallery"),
               shape = RoundedCornerShape(12.dp)
             ) {
               Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Save to Gallery")
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(stringResource(R.string.btn_save_to_gallery))
             }
           }
         }
@@ -206,7 +286,7 @@ fun ResultView(
     ) {
       AsyncImage(
         model = result.file,
-        contentDescription = "Stitched long screenshot",
+        contentDescription = stringResource(R.string.cd_stitched_long_screenshot),
         modifier = Modifier
           .fillMaxSize()
           .graphicsLayer(
@@ -228,3 +308,4 @@ private fun formatFileSize(bytes: Long): String {
     else -> "$bytes B"
   }
 }
+

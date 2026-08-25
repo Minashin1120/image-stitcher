@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,9 +34,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.model.ImageItem
 
 @Composable
@@ -43,6 +46,7 @@ fun ImageItemCard(
   index: Int,
   totalCount: Int,
   item: ImageItem,
+  onEdit: () -> Unit,
   onMoveUp: () -> Unit,
   onMoveDown: () -> Unit,
   onRemove: () -> Unit
@@ -74,7 +78,7 @@ fun ImageItemCard(
         if (item.thumbnail != null) {
           Image(
             bitmap = item.thumbnail.asImageBitmap(),
-            contentDescription = "Screenshot #${index + 1}",
+            contentDescription = stringResource(R.string.cd_screenshot_item, index + 1),
             modifier = Modifier.matchParentSize(),
             contentScale = ContentScale.Crop
           )
@@ -127,7 +131,7 @@ fun ImageItemCard(
           text = if (item.width > 0 && item.height > 0) {
             "${item.width} × ${item.height} px"
           } else {
-            "Screenshot"
+            stringResource(R.string.screenshot_default_name)
           },
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -142,17 +146,33 @@ fun ImageItemCard(
         }
       }
 
-      // Re-order & delete actions
+      // Re-order, edit & delete actions
       Row(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
       ) {
+        IconButton(
+          onClick = onEdit,
+          modifier = Modifier.size(36.dp).testTag("btn_edit_$index")
+        ) {
+          Icon(
+            Icons.Default.Edit,
+            contentDescription = stringResource(R.string.cd_edit_image),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+          )
+        }
+
         if (index > 0) {
           IconButton(
             onClick = onMoveUp,
             modifier = Modifier.size(36.dp).testTag("btn_move_up_$index")
           ) {
-            Icon(Icons.Default.ArrowUpward, contentDescription = "Move Up", modifier = Modifier.size(20.dp))
+            Icon(
+              Icons.Default.ArrowUpward,
+              contentDescription = stringResource(R.string.cd_move_up),
+              modifier = Modifier.size(20.dp)
+            )
           }
         }
 
@@ -161,7 +181,11 @@ fun ImageItemCard(
             onClick = onMoveDown,
             modifier = Modifier.size(36.dp).testTag("btn_move_down_$index")
           ) {
-            Icon(Icons.Default.ArrowDownward, contentDescription = "Move Down", modifier = Modifier.size(20.dp))
+            Icon(
+              Icons.Default.ArrowDownward,
+              contentDescription = stringResource(R.string.cd_move_down),
+              modifier = Modifier.size(20.dp)
+            )
           }
         }
 
@@ -171,7 +195,7 @@ fun ImageItemCard(
         ) {
           Icon(
             Icons.Default.DeleteOutline,
-            contentDescription = "Remove",
+            contentDescription = stringResource(R.string.cd_remove),
             tint = MaterialTheme.colorScheme.error,
             modifier = Modifier.size(20.dp)
           )

@@ -49,10 +49,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.model.ImageItem
 import com.example.model.SeamConfig
 import kotlin.math.roundToInt
@@ -82,18 +84,26 @@ fun SeamFineTuneDialog(
       ) {
         Column {
           Text(
-            text = "Seam Fine-Tuning",
+            text = stringResource(R.string.fine_tune_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
           )
           Text(
-            text = "Pair #${pairIndex + 1} (${topImage.name} ➔ ${bottomImage.name})",
+            text = stringResource(
+              R.string.fine_tune_pair_subtitle,
+              pairIndex + 1,
+              topImage.name,
+              bottomImage.name
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
         IconButton(onClick = onDismiss, modifier = Modifier.testTag("dialog_close_button")) {
-          Icon(Icons.Default.Close, contentDescription = "Close")
+          Icon(
+            Icons.Default.Close,
+            contentDescription = stringResource(R.string.cd_close)
+          )
         }
       }
     },
@@ -128,7 +138,7 @@ fun SeamFineTuneDialog(
                 modifier = Modifier.weight(1f)
               ) {
                 Text(
-                  text = "Top (End)",
+                  text = stringResource(R.string.fine_tune_top_slice),
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.primary,
                   fontWeight = FontWeight.SemiBold
@@ -137,7 +147,7 @@ fun SeamFineTuneDialog(
                 if (topImage.thumbnail != null) {
                   Image(
                     bitmap = topImage.thumbnail.asImageBitmap(),
-                    contentDescription = "Top screenshot preview",
+                    contentDescription = stringResource(R.string.cd_top_preview),
                     modifier = Modifier
                       .height(140.dp)
                       .clip(RoundedCornerShape(8.dp)),
@@ -151,7 +161,10 @@ fun SeamFineTuneDialog(
                       .background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center
                   ) {
-                    Text("No Preview", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                      stringResource(R.string.no_preview),
+                      style = MaterialTheme.typography.bodySmall
+                    )
                   }
                 }
               }
@@ -188,7 +201,7 @@ fun SeamFineTuneDialog(
                 modifier = Modifier.weight(1f)
               ) {
                 Text(
-                  text = "Bottom (Start)",
+                  text = stringResource(R.string.fine_tune_bottom_slice),
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.secondary,
                   fontWeight = FontWeight.SemiBold
@@ -197,7 +210,7 @@ fun SeamFineTuneDialog(
                 if (bottomImage.thumbnail != null) {
                   Image(
                     bitmap = bottomImage.thumbnail.asImageBitmap(),
-                    contentDescription = "Bottom screenshot preview",
+                    contentDescription = stringResource(R.string.cd_bottom_preview),
                     modifier = Modifier
                       .height(140.dp)
                       .clip(RoundedCornerShape(8.dp)),
@@ -211,7 +224,10 @@ fun SeamFineTuneDialog(
                       .background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center
                   ) {
-                    Text("No Preview", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                      stringResource(R.string.no_preview),
+                      style = MaterialTheme.typography.bodySmall
+                    )
                   }
                 }
               }
@@ -236,14 +252,21 @@ fun SeamFineTuneDialog(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-              text = "Auto-detected: ${seam.autoOverlap}px (${(seam.confidence * 100).roundToInt()}%)",
+              text = stringResource(
+                R.string.fine_tune_auto_detected,
+                seam.autoOverlap,
+                (seam.confidence * 100).roundToInt()
+              ),
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
 
           Text(
-            text = "Offset: ${if (manualOffset >= 0) "+$manualOffset" else "$manualOffset"}px",
+            text = stringResource(
+              R.string.fine_tune_offset_label,
+              if (manualOffset >= 0) "+$manualOffset" else "$manualOffset"
+            ),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = if (manualOffset != 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -254,7 +277,7 @@ fun SeamFineTuneDialog(
 
         // Pixel Nudge Controls
         Text(
-          text = "Fine Adjust Overlap Offset",
+          text = stringResource(R.string.fine_tune_adjust_heading),
           style = MaterialTheme.typography.labelMedium,
           fontWeight = FontWeight.SemiBold,
           modifier = Modifier.fillMaxWidth()
@@ -283,7 +306,10 @@ fun SeamFineTuneDialog(
             onClick = { manualOffset = 0 },
             modifier = Modifier.testTag("btn_reset_offset")
           ) {
-            Icon(Icons.Default.RestartAlt, contentDescription = "Reset offset")
+            Icon(
+              Icons.Default.RestartAlt,
+              contentDescription = stringResource(R.string.cd_reset_offset)
+            )
           }
           FilledTonalButton(
             onClick = { manualOffset += 1 },
@@ -310,12 +336,12 @@ fun SeamFineTuneDialog(
       ) {
         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Apply")
+        Text(stringResource(R.string.btn_apply))
       }
     },
     dismissButton = {
       TextButton(onClick = onDismiss, modifier = Modifier.testTag("btn_cancel_seam")) {
-        Text("Cancel")
+        Text(stringResource(R.string.btn_cancel))
       }
     }
   )

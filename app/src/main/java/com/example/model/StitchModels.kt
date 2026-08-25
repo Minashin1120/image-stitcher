@@ -41,7 +41,8 @@ data class StitchGlobalSettings(
   val navBarHeightPx: Int = 60,
   val edgeBlending: Boolean = true,
   val outputFormat: OutputFormat = OutputFormat.PNG,
-  val outputQuality: Int = 95
+  val outputQuality: Int = 95,
+  val preserveOriginalResolution: Boolean = false
 )
 
 data class StitchResult(
@@ -50,8 +51,8 @@ data class StitchResult(
   val width: Int,
   val height: Int,
   val fileSizeBytes: Long,
-  val sourceCount: Int,
-  val totalOverlapRemoved: Int
+  val sourceCount: Int = 1,
+  val totalOverlapRemoved: Int = 0
 )
 
 sealed interface StitchUiState {

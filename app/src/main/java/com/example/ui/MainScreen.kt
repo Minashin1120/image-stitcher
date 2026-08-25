@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TouchApp
@@ -68,11 +70,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
 import com.example.model.SeamConfig
 import com.example.model.StitchUiState
 import com.example.ui.components.ImageItemCard
@@ -97,13 +101,24 @@ fun MainScreen(viewModel: StitchViewModel) {
   val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   var activeFineTunePairIndex by remember { mutableStateOf<Int?>(null) }
+  var activeEditingImageIndex by remember { mutableStateOf<Int?>(null) }
+  var standaloneEditingUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
-  // Modern Android Photo Picker contract
+  // Modern Android Photo Picker contract (Multiple images for stitching)
   val photoPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 30)
   ) { uris ->
     if (uris.isNotEmpty()) {
       viewModel.addImages(uris)
+    }
+  }
+
+  // Single Photo Picker contract (for standalone image editing)
+  val singlePhotoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    if (uri != null) {
+      standaloneEditingUri = uri
     }
   }
 
@@ -124,10 +139,94 @@ fun MainScreen(viewModel: StitchViewModel) {
       onSaveToGallery = { viewModel.saveToGallery(result) },
       onShare = {
         val shareIntent = viewModel.createShareIntent(context, result)
-        context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Stitched Screenshot"))
+        context.startActivity(
+          android.content.Intent.createChooser(
+            shareIntent,
+            context.getString(R.string.share_chooser_title)
+          )
+        )
+      },
+      onResultUpdated = { updated ->
+        viewModel.updateStitchResult(updated)
       }
     )
     return
+  }
+
+  // If editing an arbitrary standalone image picked from the home screen
+  standaloneEditingUri?.let { standAloneUri ->
+    val tempFile = remember(standAloneUri) {
+      val f = File(context.cacheDir, "temp_standalone_edit_${System.currentTimeMillis()}.png")
+      try {
+        context.contentResolver.openInputStream(standAloneUri)?.use { inp ->
+          f.outputStream().use { out -> inp.copyTo(out) }
+        }
+      } catch (e: Exception) {
+        e.printStackTrace()
+      }
+      f
+    }
+
+    com.example.ui.components.ImageEditorScreen(
+      sourceFile = tempFile,
+      fullBitmapLoader = {
+        com.example.engine.StitchEngine.loadFullBitmap(context, standAloneUri, maxWidth = 0)
+      },
+      onDismiss = { standaloneEditingUri = null },
+      onEditsApplied = { outFile, newWidth, newHeight, newSizeBytes ->
+        val result = com.example.model.StitchResult(
+          file = outFile,
+          uri = android.net.Uri.fromFile(outFile),
+          width = newWidth,
+          height = newHeight,
+          fileSizeBytes = newSizeBytes,
+          sourceCount = 1
+        )
+        viewModel.updateStitchResult(result)
+        standaloneEditingUri = null
+      }
+    )
+    return
+  }
+
+  // If editing an individual image item from the queue
+  activeEditingImageIndex?.let { editIdx ->
+    if (editIdx in images.indices) {
+      val itemToEdit = images[editIdx]
+      // Create a temporary cache file if URI is content:// or read directly
+      val tempFile = remember(itemToEdit.id) {
+        val f = File(context.cacheDir, "temp_edit_${itemToEdit.id}.png")
+        try {
+          context.contentResolver.openInputStream(itemToEdit.uri)?.use { inp ->
+            f.outputStream().use { out -> inp.copyTo(out) }
+          }
+        } catch (e: Exception) {
+          e.printStackTrace()
+        }
+        f
+      }
+
+      com.example.ui.components.ImageEditorScreen(
+        sourceFile = tempFile,
+        fullBitmapLoader = {
+          com.example.engine.StitchEngine.loadFullBitmap(context, itemToEdit.uri, maxWidth = 0)
+        },
+        onDismiss = { activeEditingImageIndex = null },
+        onEditsApplied = { outFile, newWidth, newHeight, newSizeBytes ->
+          val newThumb = android.graphics.BitmapFactory.decodeFile(outFile.absolutePath)
+          viewModel.updateImageItem(
+            index = editIdx,
+            newUri = android.net.Uri.fromFile(outFile),
+            newWidth = newWidth,
+            newHeight = newHeight,
+            newSizeBytes = newSizeBytes,
+            newThumbnail = newThumb
+          )
+          activeEditingImageIndex = null
+        }
+      )
+      return
+    }
   }
 
   Scaffold(
@@ -144,32 +243,54 @@ fun MainScreen(viewModel: StitchViewModel) {
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-              "Screenshot Stitcher",
+              text = stringResource(R.string.title_app),
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold
             )
           }
         },
         actions = {
+          IconButton(
+            onClick = {
+              singlePhotoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+              )
+            },
+            modifier = Modifier.testTag("btn_home_edit_image")
+          ) {
+            Icon(
+              Icons.Default.Edit,
+              contentDescription = stringResource(R.string.cd_edit_single_image)
+            )
+          }
           if (images.isNotEmpty()) {
             IconButton(
               onClick = { viewModel.autoDetectAllSeams() },
               modifier = Modifier.testTag("btn_redetect")
             ) {
-              Icon(Icons.Default.AutoAwesome, contentDescription = "Auto detect overlaps")
+              Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = stringResource(R.string.cd_auto_detect)
+              )
             }
             IconButton(
               onClick = { viewModel.clearImages() },
               modifier = Modifier.testTag("btn_clear_all")
             ) {
-              Icon(Icons.Default.Clear, contentDescription = "Clear all images")
+              Icon(
+                Icons.Default.Clear,
+                contentDescription = stringResource(R.string.cd_clear_all)
+              )
             }
           }
           IconButton(
             onClick = { showSettingsSheet = true },
             modifier = Modifier.testTag("btn_open_settings")
           ) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings")
+            Icon(
+              Icons.Default.Settings,
+              contentDescription = stringResource(R.string.cd_settings)
+            )
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -204,7 +325,7 @@ fun MainScreen(viewModel: StitchViewModel) {
             ) {
               Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Add More")
+              Text(stringResource(R.string.btn_add_more))
             }
 
             Button(
@@ -221,7 +342,7 @@ fun MainScreen(viewModel: StitchViewModel) {
               Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(20.dp))
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                "Stitch ${images.size} Shots",
+                stringResource(R.string.btn_stitch_now, images.size),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
               )
@@ -241,6 +362,11 @@ fun MainScreen(viewModel: StitchViewModel) {
         EmptyStateView(
           onPickImages = {
             photoPickerLauncher.launch(
+              PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+          },
+          onPickSingleImageToEdit = {
+            singlePhotoPickerLauncher.launch(
               PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
           }
@@ -280,7 +406,7 @@ fun MainScreen(viewModel: StitchViewModel) {
                   )
                   Spacer(modifier = Modifier.width(8.dp))
                   Text(
-                    text = "${images.size} screenshots queued",
+                    text = stringResource(R.string.header_queued_count, images.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -297,7 +423,7 @@ fun MainScreen(viewModel: StitchViewModel) {
                 ) {
                   Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                   Spacer(modifier = Modifier.width(4.dp))
-                  Text("+ Add")
+                  Text(stringResource(R.string.btn_add))
                 }
               }
             }
@@ -308,6 +434,7 @@ fun MainScreen(viewModel: StitchViewModel) {
               index = index,
               totalCount = images.size,
               item = item,
+              onEdit = { activeEditingImageIndex = index },
               onMoveUp = { viewModel.moveImage(index, index - 1) },
               onMoveDown = { viewModel.moveImage(index, index + 1) },
               onRemove = { viewModel.removeImage(index) }
@@ -347,7 +474,7 @@ fun MainScreen(viewModel: StitchViewModel) {
                   )
                   Spacer(modifier = Modifier.width(12.dp))
                   Text(
-                    text = "Please add at least 1 more screenshot to detect overlaps and stitch.",
+                    text = stringResource(R.string.hint_single_image),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                   )
@@ -384,7 +511,11 @@ fun MainScreen(viewModel: StitchViewModel) {
               )
               Spacer(modifier = Modifier.width(14.dp))
               Text(
-                text = "Detecting overlap for pair ${state.currentPair}/${state.totalPairs}...",
+                text = stringResource(
+                  R.string.detecting_pair_progress,
+                  state.currentPair,
+                  state.totalPairs
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface
               )
@@ -398,7 +529,7 @@ fun MainScreen(viewModel: StitchViewModel) {
             confirmButton = {},
             title = {
               Text(
-                "Stitching Screenshots...",
+                stringResource(R.string.stitching_dialog_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
               )
@@ -428,11 +559,11 @@ fun MainScreen(viewModel: StitchViewModel) {
         is StitchUiState.Error -> {
           AlertDialog(
             onDismissRequest = { viewModel.resetToEdit() },
-            title = { Text("Stitch Error") },
+            title = { Text(stringResource(R.string.stitch_error_title)) },
             text = { Text(state.message) },
             confirmButton = {
               Button(onClick = { viewModel.resetToEdit() }) {
-                Text("OK")
+                Text(stringResource(R.string.btn_ok))
               }
             }
           )
@@ -475,7 +606,10 @@ fun MainScreen(viewModel: StitchViewModel) {
 }
 
 @Composable
-private fun EmptyStateView(onPickImages: () -> Unit) {
+private fun EmptyStateView(
+  onPickImages: () -> Unit,
+  onPickSingleImageToEdit: () -> Unit
+) {
   Column(
     modifier = Modifier
       .fillMaxSize()
@@ -502,7 +636,7 @@ private fun EmptyStateView(onPickImages: () -> Unit) {
     Spacer(modifier = Modifier.height(24.dp))
 
     Text(
-      text = "Stitch Screenshots Effortlessly",
+      text = stringResource(R.string.empty_title),
       style = MaterialTheme.typography.headlineSmall,
       fontWeight = FontWeight.Bold,
       textAlign = TextAlign.Center
@@ -511,13 +645,13 @@ private fun EmptyStateView(onPickImages: () -> Unit) {
     Spacer(modifier = Modifier.height(10.dp))
 
     Text(
-      text = "Select 2 or more overlapping screenshots. The app will automatically detect and remove duplicated content into one long, continuous image.",
+      text = stringResource(R.string.empty_description),
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center
     )
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(28.dp))
 
     Button(
       onClick = onPickImages,
@@ -530,13 +664,32 @@ private fun EmptyStateView(onPickImages: () -> Unit) {
       Icon(Icons.Default.Collections, contentDescription = null, modifier = Modifier.size(20.dp))
       Spacer(modifier = Modifier.width(10.dp))
       Text(
-        "Select Screenshots",
+        stringResource(R.string.btn_select_screenshots),
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold
       )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(12.dp))
+
+    OutlinedButton(
+      onClick = onPickSingleImageToEdit,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(52.dp)
+        .testTag("btn_empty_edit_single_image"),
+      shape = RoundedCornerShape(16.dp)
+    ) {
+      Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        stringResource(R.string.btn_select_single_image_to_edit),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold
+      )
+    }
+
+    Spacer(modifier = Modifier.height(28.dp))
 
     // Feature Highlights Row
     Card(
@@ -549,15 +702,15 @@ private fun EmptyStateView(onPickImages: () -> Unit) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FeatureHintItem(
           icon = Icons.Default.AutoAwesome,
-          text = "Pixel-accurate auto overlap detection"
+          text = stringResource(R.string.feature_auto_detect)
         )
         FeatureHintItem(
           icon = Icons.Default.AutoFixHigh,
-          text = "Optional status bar & navigation bar trimming"
+          text = stringResource(R.string.feature_trim_bars)
         )
         FeatureHintItem(
           icon = Icons.Default.TouchApp,
-          text = "Interactive manual seam fine-tuning & preview"
+          text = stringResource(R.string.feature_fine_tune)
         )
       }
     }

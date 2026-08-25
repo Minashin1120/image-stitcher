@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Tune
@@ -36,8 +37,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.model.OutputFormat
 import com.example.model.StitchGlobalSettings
 import kotlin.math.roundToInt
@@ -72,7 +75,7 @@ fun SettingsBottomSheet(
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-          text = "Stitching Settings",
+          text = stringResource(R.string.settings_title),
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold
         )
@@ -105,14 +108,14 @@ fun SettingsBottomSheet(
               )
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = "Auto-Detect Overlaps",
+                text = stringResource(R.string.settings_auto_detect_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
               )
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-              text = "Automatically matches repetitive lines and aligns consecutive screenshots",
+              text = stringResource(R.string.settings_auto_detect_desc),
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -156,14 +159,14 @@ fun SettingsBottomSheet(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Trim Top Status Bar",
+                  text = stringResource(R.string.settings_trim_status_bar_title),
                   style = MaterialTheme.typography.titleMedium,
                   fontWeight = FontWeight.SemiBold
                 )
               }
               Spacer(modifier = Modifier.height(4.dp))
               Text(
-                text = "Excludes repetitive battery/clock header from subsequent shots",
+                text = stringResource(R.string.settings_trim_status_bar_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -179,7 +182,7 @@ fun SettingsBottomSheet(
           if (settings.removeStatusBar) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-              text = "Status Bar Height: ${settings.statusBarHeightPx}px",
+              text = stringResource(R.string.settings_status_bar_height_label, settings.statusBarHeightPx),
               style = MaterialTheme.typography.labelMedium,
               color = MaterialTheme.colorScheme.primary
             )
@@ -223,14 +226,14 @@ fun SettingsBottomSheet(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Trim Bottom Navigation Bar",
+                  text = stringResource(R.string.settings_trim_nav_bar_title),
                   style = MaterialTheme.typography.titleMedium,
                   fontWeight = FontWeight.SemiBold
                 )
               }
               Spacer(modifier = Modifier.height(4.dp))
               Text(
-                text = "Excludes bottom gesture pill/home buttons from leading shots",
+                text = stringResource(R.string.settings_trim_nav_bar_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -246,7 +249,7 @@ fun SettingsBottomSheet(
           if (settings.removeNavBar) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-              text = "Nav Bar Height: ${settings.navBarHeightPx}px",
+              text = stringResource(R.string.settings_nav_bar_height_label, settings.navBarHeightPx),
               style = MaterialTheme.typography.labelMedium,
               color = MaterialTheme.colorScheme.primary
             )
@@ -257,6 +260,54 @@ fun SettingsBottomSheet(
               modifier = Modifier.testTag("slider_nav_bar_height")
             )
           }
+        }
+      }
+
+      // Preserve Original Resolution Card
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(16.dp)
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                Icons.Default.HighQuality,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = stringResource(R.string.settings_preserve_resolution_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+              text = stringResource(R.string.settings_preserve_resolution_desc),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          Switch(
+            checked = settings.preserveOriginalResolution,
+            onCheckedChange = { onUpdateSettings(settings.copy(preserveOriginalResolution = it)) },
+            modifier = Modifier.testTag("switch_preserve_resolution")
+          )
         }
       }
 
@@ -284,7 +335,7 @@ fun SettingsBottomSheet(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Output Image Format",
+              text = stringResource(R.string.settings_output_format_title),
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.SemiBold
             )

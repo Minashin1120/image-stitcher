@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.R
 import com.example.engine.StitchEngine
 import com.example.model.ImageItem
 import com.example.model.SeamConfig
@@ -169,15 +170,18 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   fun stitchNow() {
+    val context = getApplication<Application>()
     val currentImages = _images.value
     if (currentImages.size < 2) {
-      _userMessage.value = "Please select at least 2 images to stitch."
+      _userMessage.value = context.getString(R.string.msg_need_at_least_2_images)
       return
     }
 
     viewModelScope.launch {
-      val context = getApplication<Application>()
-      _uiState.value = StitchUiState.Stitching(progress = 0f, statusMessage = "Starting...")
+      _uiState.value = StitchUiState.Stitching(
+        progress = 0f,
+        statusMessage = context.getString(R.string.progress_starting)
+      )
 
       val result = StitchEngine.stitchImages(
         context = context,
@@ -191,13 +195,39 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
       result.onSuccess { stitchResult ->
         _uiState.value = StitchUiState.Success(stitchResult)
       }.onFailure { error ->
-        _uiState.value = StitchUiState.Error(error.localizedMessage ?: "Failed to stitch images")
+        _uiState.value = StitchUiState.Error(
+          error.localizedMessage ?: context.getString(R.string.msg_stitch_failed)
+        )
       }
     }
   }
 
   fun resetToEdit() {
     _uiState.value = StitchUiState.Idle
+  }
+
+  fun updateStitchResult(updatedResult: StitchResult) {
+    _uiState.value = StitchUiState.Success(updatedResult)
+    val context = getApplication<Application>()
+    _userMessage.value = context.getString(R.string.msg_edit_saved)
+  }
+
+  fun updateImageItem(index: Int, newUri: Uri, newWidth: Int, newHeight: Int, newSizeBytes: Long, newThumbnail: android.graphics.Bitmap?) {
+    val current = _images.value.toMutableList()
+    if (index in current.indices) {
+      val old = current[index]
+      current[index] = old.copy(
+        uri = newUri,
+        width = newWidth,
+        height = newHeight,
+        fileSizeBytes = newSizeBytes,
+        thumbnail = newThumbnail ?: old.thumbnail
+      )
+      _images.value = current
+      autoDetectAllSeams()
+      val context = getApplication<Application>()
+      _userMessage.value = context.getString(R.string.msg_edit_saved)
+    }
   }
 
   fun saveToGallery(result: StitchResult) {
@@ -236,9 +266,9 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
       }
 
       if (success) {
-        _userMessage.value = "Screenshot saved to Pictures/ScreenshotStitcher!"
+        _userMessage.value = context.getString(R.string.msg_saved_to_gallery)
       } else {
-        _userMessage.value = "Failed to save screenshot to gallery."
+        _userMessage.value = context.getString(R.string.msg_save_failed)
       }
     }
   }
