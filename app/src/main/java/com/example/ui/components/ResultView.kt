@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.RestartAlt
@@ -81,7 +81,7 @@ fun ResultView(
         },
         navigationIcon = {
           IconButton(onClick = onBack, modifier = Modifier.testTag("result_back_button")) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back to editor")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to editor")
           }
         },
         actions = {

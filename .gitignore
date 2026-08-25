@@ -15,7 +15,7 @@
 .cxx
 local.properties
 .env
-debug.keystore
+# debug.keystore (included in git for consistent debug signing)
 
 # AI & Handover docs (excluded from git tracking)
 AGENTS.md
