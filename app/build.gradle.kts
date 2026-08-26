@@ -25,23 +25,24 @@ android {
 
   signingConfigs {
     getByName("debug") {
-      storeFile = rootProject.file("debug.keystore")
+      storeFile = if (rootProject.file("ci/debug.keystore").exists()) {
+        rootProject.file("ci/debug.keystore")
+      } else {
+        rootProject.file("debug.keystore")
+      }
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
     }
     create("release") {
-      val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-      val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-      val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-      val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-
-      if (keystorePath != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
-        storeFile = file(keystorePath)
-        storePassword = keystorePassword
-        this.keyAlias = keyAlias
-        this.keyPassword = keyPassword
+      storeFile = if (rootProject.file("ci/debug.keystore").exists()) {
+        rootProject.file("ci/debug.keystore")
+      } else {
+        rootProject.file("debug.keystore")
       }
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
     }
   }
 

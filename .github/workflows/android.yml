@@ -11,7 +11,7 @@ on:
       - 'gradlew'
       - 'gradlew.bat'
       - 'gradle.properties'
-      - 'debug.keystore'
+      - 'ci/debug.keystore'
       - '.github/workflows/android.yml'
   pull_request:
     branches: [ main, master, develop ]
@@ -23,7 +23,7 @@ on:
       - 'gradlew'
       - 'gradlew.bat'
       - 'gradle.properties'
-      - 'debug.keystore'
+      - 'ci/debug.keystore'
       - '.github/workflows/android.yml'
 
 concurrency:
@@ -51,6 +51,17 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Setup fixed debug keystore
+        run: |
+          if [ ! -f ci/debug.keystore ]; then
+            echo "ERROR: ci/debug.keystore not found"
+            exit 1
+          fi
+          mkdir -p ~/.android
+          cp ci/debug.keystore ~/.android/debug.keystore
+          ls -lh ~/.android/debug.keystore
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey || true
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
