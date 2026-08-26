@@ -54,12 +54,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           validate-wrappers: false
-          gradle-version: '8.11.1'
+          gradle-version: '9.3.1'
 
       - name: Ensure valid Gradle Wrapper
         run: |
           chmod +x gradlew
-          gradle wrapper --gradle-version 8.11.1 || true
+          gradle wrapper --gradle-version 9.3.1 || true
 
       - name: Setup fixed debug keystore
         run: |
