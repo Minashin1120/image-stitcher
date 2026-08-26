@@ -43,10 +43,17 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure valid Gradle Wrapper
+        run: |
+          if ! java -jar gradle/wrapper/gradle-wrapper.jar --version > /dev/null 2>&1; then
+            echo "gradle-wrapper.jar is invalid or corrupted. Generating fresh wrapper..."
+            gradle wrapper
+          fi
+          chmod +x gradlew
 
       - name: Setup fixed keystore
         run: |
