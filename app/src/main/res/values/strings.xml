@@ -104,4 +104,8 @@
     <string name="cd_edit_single_image">Select and edit an image</string>
     <string name="btn_select_single_image_to_edit">Edit Single Image</string>
     <string name="single_image_edit_result_subtitle">%1$d × %2$d px</string>
+    <string name="settings_language_title">App Language</string>
+    <string name="settings_language_desc">Change app language in system Settings</string>
+    <string name="settings_open_language_settings">Open System Language Settings</string>
+    <string name="settings_current_language">Current: English</string>
 </resources>

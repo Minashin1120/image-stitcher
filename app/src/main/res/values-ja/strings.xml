@@ -104,4 +104,8 @@
     <string name="cd_edit_single_image">任意の画像を選択して編集</string>
     <string name="btn_select_single_image_to_edit">任意の画像を編集</string>
     <string name="single_image_edit_result_subtitle">%1$d × %2$d px</string>
+    <string name="settings_language_title">アプリの言語</string>
+    <string name="settings_language_desc">端末の設定アプリからアプリごとの言語を変更できます</string>
+    <string name="settings_open_language_settings">端末の言語設定を開く</string>
+    <string name="settings_current_language">現在: 日本語</string>
 </resources>

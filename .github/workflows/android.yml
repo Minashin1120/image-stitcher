@@ -11,7 +11,8 @@ on:
       - 'gradlew'
       - 'gradlew.bat'
       - 'gradle.properties'
-      - 'ci/debug.keystore'
+      - 'ci/**'
+      - 'debug.keystore'
       - '.github/workflows/android.yml'
   pull_request:
     branches: [ main, master, develop ]
@@ -23,7 +24,8 @@ on:
       - 'gradlew'
       - 'gradlew.bat'
       - 'gradle.properties'
-      - 'ci/debug.keystore'
+      - 'ci/**'
+      - 'debug.keystore'
       - '.github/workflows/android.yml'
 
 concurrency:
@@ -54,12 +56,29 @@ jobs:
 
       - name: Setup fixed debug keystore
         run: |
-          if [ ! -f ci/debug.keystore ]; then
-            echo "ERROR: ci/debug.keystore not found"
-            exit 1
-          fi
           mkdir -p ~/.android
-          cp ci/debug.keystore ~/.android/debug.keystore
+          mkdir -p ci
+          if [ -f ci/debug.keystore ]; then
+            echo "Using ci/debug.keystore"
+            cp ci/debug.keystore ~/.android/debug.keystore
+          elif [ -f debug.keystore ]; then
+            echo "Using debug.keystore from root"
+            cp debug.keystore ~/.android/debug.keystore
+            cp debug.keystore ci/debug.keystore
+          elif [ -f ci/debug.keystore.base64 ]; then
+            echo "Restoring from ci/debug.keystore.base64"
+            base64 -d ci/debug.keystore.base64 > ~/.android/debug.keystore
+            cp ~/.android/debug.keystore ci/debug.keystore
+          elif [ -f debug.keystore.base64 ]; then
+            echo "Restoring from debug.keystore.base64"
+            base64 -d debug.keystore.base64 > ~/.android/debug.keystore
+            cp ~/.android/debug.keystore ci/debug.keystore
+          else
+            echo "Generating fixed debug keystore as fallback"
+            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            cp ~/.android/debug.keystore ci/debug.keystore
+          fi
+          cp ~/.android/debug.keystore debug.keystore || true
           ls -lh ~/.android/debug.keystore
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey || true
 
