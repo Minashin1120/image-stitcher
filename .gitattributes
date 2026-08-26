@@ -1,0 +1,21 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare binary files that must not be modified or normalized
+*.jar binary
+*.keystore binary
+*.jks binary
+*.apk binary
+*.aab binary
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+
+# Shell scripts must have LF endings
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows batch scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
