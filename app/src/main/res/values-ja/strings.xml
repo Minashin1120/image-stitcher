@@ -100,6 +100,15 @@
     <string name="hint_drag_mosaic_rect">画面を指でドラッグして枠内の領域にモザイクをかけます</string>
     <string name="hint_draw_mosaic_pen">指でなぞった部分にモザイクをかけます</string>
     <string name="hint_crop_handles">周囲のハンドルをドラッグして画像を切り抜きます</string>
+    <string name="btn_delete_mosaic">削除</string>
+    <string name="cd_delete_mosaic">選択したモザイクを削除</string>
+    <string name="hint_mosaic_selected">モザイクを選択中</string>
+    <string name="label_mosaic_intensity">モザイクの強さ</string>
+    <string name="mosaic_intensity_light">弱（細）</string>
+    <string name="mosaic_intensity_medium">中（標準）</string>
+    <string name="mosaic_intensity_strong">強（荒）</string>
+    <string name="mosaic_intensity_extra">極強</string>
+    <string name="label_pen_size">ペンの太さ</string>
     <string name="btn_edit_single_image">画像を編集</string>
     <string name="cd_edit_single_image">任意の画像を選択して編集</string>
     <string name="btn_select_single_image_to_edit">任意の画像を編集</string>

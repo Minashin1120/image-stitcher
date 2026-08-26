@@ -17,27 +17,33 @@ enum class MosaicMode {
 }
 
 sealed interface EditAction {
+  val id: String
+
   data class MarkerStroke(
     val points: List<Offset>, // In relative coordinate (0f..1f)
     val color: Color,
-    val strokeWidthRelative: Float // Relative to image width
+    val strokeWidthRelative: Float, // Relative to image width
+    override val id: String = java.util.UUID.randomUUID().toString()
   ) : EditAction
 
   data class HighlighterStroke(
     val points: List<Offset>, // In relative coordinate (0f..1f)
     val color: Color,
-    val strokeWidthRelative: Float // Relative to image width
+    val strokeWidthRelative: Float, // Relative to image width
+    override val id: String = java.util.UUID.randomUUID().toString()
   ) : EditAction
 
   data class MosaicPen(
     val points: List<Offset>, // In relative coordinate (0f..1f)
     val strokeWidthRelative: Float,
-    val pixelSizeRelative: Float
+    val pixelSizeRelative: Float,
+    override val id: String = java.util.UUID.randomUUID().toString()
   ) : EditAction
 
   data class MosaicRect(
     val rectRelative: Rect, // In relative coordinate (0f..1f)
-    val pixelSizeRelative: Float
+    val pixelSizeRelative: Float,
+    override val id: String = java.util.UUID.randomUUID().toString()
   ) : EditAction
 }
 

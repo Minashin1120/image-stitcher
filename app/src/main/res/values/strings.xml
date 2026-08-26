@@ -100,6 +100,15 @@
     <string name="hint_drag_mosaic_rect">Drag across the screen to blur a rectangular area</string>
     <string name="hint_draw_mosaic_pen">Draw with your finger to apply mosaic blur</string>
     <string name="hint_crop_handles">Drag border handles to crop the image</string>
+    <string name="btn_delete_mosaic">Delete</string>
+    <string name="cd_delete_mosaic">Delete selected mosaic</string>
+    <string name="hint_mosaic_selected">Mosaic selected</string>
+    <string name="label_mosaic_intensity">Mosaic Strength</string>
+    <string name="mosaic_intensity_light">Light</string>
+    <string name="mosaic_intensity_medium">Medium</string>
+    <string name="mosaic_intensity_strong">Strong</string>
+    <string name="mosaic_intensity_extra">Extra</string>
+    <string name="label_pen_size">Pen Size</string>
     <string name="btn_edit_single_image">Edit Image</string>
     <string name="cd_edit_single_image">Select and edit an image</string>
     <string name="btn_select_single_image_to_edit">Edit Single Image</string>

@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.FileInputStream
+import kotlin.math.roundToInt
 
 class StitchViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -143,12 +144,15 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
             list[i].width.toFloat() / topThumb.width
           } else 1f
 
-          val scaledOverlap = (detected.autoOverlap * scaleRatio).toInt()
+          val scaledOverlap = (detected.autoOverlap * scaleRatio).roundToInt()
+          val scaledTopTrim = (detected.topTrim * scaleRatio).roundToInt()
+          val scaledBottomTrim = (detected.bottomTrim * scaleRatio).roundToInt()
+
           newSeams.add(
             detected.copy(
               autoOverlap = scaledOverlap,
-              topTrim = if (currentSettings.removeStatusBar) currentSettings.statusBarHeightPx else 0,
-              bottomTrim = if (currentSettings.removeNavBar) currentSettings.navBarHeightPx else 0
+              topTrim = if (currentSettings.removeStatusBar) currentSettings.statusBarHeightPx else scaledTopTrim,
+              bottomTrim = if (currentSettings.removeNavBar) currentSettings.navBarHeightPx else scaledBottomTrim
             )
           )
         } else {
