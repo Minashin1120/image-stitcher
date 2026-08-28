@@ -102,6 +102,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -641,25 +642,64 @@ fun ImageEditorScreen(
             )
 
             // Drawing and gesture canvas
-            Canvas(
-              modifier = Modifier
+            val gestureModifier = if (selectedTool == EditTool.CROP) {
+              Modifier
                 .fillMaxSize()
-                .pointerInput(selectedTool, mosaicMode) {
-                  detectTapGestures(
-                    onTap = { offset ->
+                .pointerInput(Unit) {
+                  detectDragGestures(
+                    onDragStart = { offset ->
                       val w = size.width.toFloat()
                       val h = size.height.toFloat()
                       val relX = (offset.x / w).coerceIn(0f, 1f)
                       val relY = (offset.y / h).coerceIn(0f, 1f)
-
-                      if (selectedTool == EditTool.MOSAIC) {
-                        val hit = findMosaicAt(relX, relY, actionHistory, w, h)
-                        selectedMosaicId = hit?.id
-                      } else {
-                        selectedMosaicId = null
+                      val handle = findTouchedCropHandle(relX, relY, cropBounds, w, h, density)
+                      activeCropHandle = handle
+                      cropDragStartBounds = cropBounds
+                      cropDragStartPoint = Offset(relX, relY)
+                    },
+                    onDrag = { change, _ ->
+                      change.consume()
+                      val w = size.width.toFloat()
+                      val h = size.height.toFloat()
+                      val relX = (change.position.x / w).coerceIn(0f, 1f)
+                      val relY = (change.position.y / h).coerceIn(0f, 1f)
+                      val handle = activeCropHandle
+                      if (handle != null) {
+                        cropBounds = updateCropBounds(
+                          start = cropDragStartBounds,
+                          handle = handle,
+                          startPoint = cropDragStartPoint,
+                          currentPoint = Offset(relX, relY),
+                          canvasWidth = w,
+                          canvasHeight = h,
+                          density = density
+                        )
                       }
+                    },
+                    onDragEnd = {
+                      activeCropHandle = null
+                    },
+                    onDragCancel = {
+                      activeCropHandle = null
                     }
                   )
+                }
+            } else {
+              Modifier
+                .fillMaxSize()
+                .pointerInput(selectedTool, mosaicMode) {
+                  if (selectedTool == EditTool.MOSAIC) {
+                    detectTapGestures(
+                      onTap = { offset ->
+                        val w = size.width.toFloat()
+                        val h = size.height.toFloat()
+                        val relX = (offset.x / w).coerceIn(0f, 1f)
+                        val relY = (offset.y / h).coerceIn(0f, 1f)
+                        val hit = findMosaicAt(relX, relY, actionHistory, w, h)
+                        selectedMosaicId = hit?.id
+                      }
+                    )
+                  }
                 }
                 .pointerInput(selectedTool, mosaicMode) {
                   detectDragGestures(
@@ -684,11 +724,7 @@ fun ImageEditorScreen(
                             currentMosaicRectEnd = relPt
                           }
                         }
-                        EditTool.CROP -> {
-                          cropDragStartBounds = cropBounds
-                          cropDragStartPoint = relPt
-                          activeCropHandle = findTouchedCropHandle(relX, relY, cropBounds, w, h)
-                        }
+                        EditTool.CROP -> {}
                       }
                     },
                     onDrag = { change, _ ->
@@ -710,13 +746,7 @@ fun ImageEditorScreen(
                             currentMosaicRectEnd = relPt
                           }
                         }
-                        EditTool.CROP -> {
-                          activeCropHandle?.let { handle ->
-                            val deltaX = relX - cropDragStartPoint.x
-                            val deltaY = relY - cropDragStartPoint.y
-                            cropBounds = updateCropBoundsFromDelta(cropDragStartBounds, handle, deltaX, deltaY)
-                          }
-                        }
+                        EditTool.CROP -> {}
                       }
                     },
                     onDragEnd = {
@@ -733,7 +763,6 @@ fun ImageEditorScreen(
                           }
                           currentStrokePoints = emptyList()
                         }
-
                         EditTool.HIGHLIGHTER -> {
                           if (currentStrokePoints.size >= 2) {
                             val action = EditAction.HighlighterStroke(
@@ -746,7 +775,6 @@ fun ImageEditorScreen(
                           }
                           currentStrokePoints = emptyList()
                         }
-
                         EditTool.MOSAIC -> {
                           if (mosaicMode == MosaicMode.PEN) {
                             if (currentStrokePoints.size >= 2) {
@@ -778,20 +806,20 @@ fun ImageEditorScreen(
                             currentMosaicRectEnd = null
                           }
                         }
-
-                        EditTool.CROP -> {
-                          activeCropHandle = null
-                        }
+                        EditTool.CROP -> {}
                       }
                     },
                     onDragCancel = {
                       currentStrokePoints = emptyList()
                       currentMosaicRectStart = null
                       currentMosaicRectEnd = null
-                      activeCropHandle = null
                     }
                   )
                 }
+            }
+
+            Canvas(
+              modifier = gestureModifier
             ) {
               val w = size.width
               val h = size.height
@@ -1263,12 +1291,19 @@ private fun DrawScope.drawCropOverlayBox(
   val maskColor = Color(0x99000000)
 
   drawRect(maskColor, Offset.Zero, Size(canvasWidth, cropT))
-  drawRect(maskColor, Offset(0f, cropB), Size(canvasWidth, canvasHeight - cropB))
-  drawRect(maskColor, Offset(0f, cropT), Size(cropL, cropB - cropT))
-  drawRect(maskColor, Offset(cropR, cropT), Size(canvasWidth - cropR, cropB - cropT))
+  drawRect(maskColor, Offset(0f, cropB), Size(canvasWidth, (canvasHeight - cropB).coerceAtLeast(0f)))
+  drawRect(maskColor, Offset(0f, cropT), Size(cropL, (cropB - cropT).coerceAtLeast(0f)))
+  drawRect(maskColor, Offset(cropR, cropT), Size((canvasWidth - cropR).coerceAtLeast(0f), (cropB - cropT).coerceAtLeast(0f)))
 
   val cropRect = Rect(cropL, cropT, cropR, cropB)
 
+  // Outer border with subtle shadow
+  drawRect(
+    color = Color(0x66000000),
+    topLeft = cropRect.topLeft,
+    size = cropRect.size,
+    style = Stroke(width = 3f * density)
+  )
   drawRect(
     color = Color.White,
     topLeft = cropRect.topLeft,
@@ -1289,29 +1324,36 @@ private fun DrawScope.drawCropOverlayBox(
     val handleLen = 22f * density
     val handleThick = 4.5f * density
     val handleColor = Color.White
+    val handleShadowColor = Color(0x88000000)
+    val shadowThick = handleThick + 2f * density
+
+    fun drawHandleLine(start: Offset, end: Offset) {
+      drawLine(handleShadowColor, start, end, shadowThick, cap = StrokeCap.Round)
+      drawLine(handleColor, start, end, handleThick, cap = StrokeCap.Round)
+    }
 
     // 4 Corners
-    drawLine(handleColor, Offset(cropL - 2f, cropT), Offset(cropL + handleLen, cropT), handleThick)
-    drawLine(handleColor, Offset(cropL, cropT - 2f), Offset(cropL, cropT + handleLen), handleThick)
+    drawHandleLine(Offset(cropL, cropT), Offset(cropL + handleLen, cropT))
+    drawHandleLine(Offset(cropL, cropT), Offset(cropL, cropT + handleLen))
 
-    drawLine(handleColor, Offset(cropR + 2f, cropT), Offset(cropR - handleLen, cropT), handleThick)
-    drawLine(handleColor, Offset(cropR, cropT - 2f), Offset(cropR, cropT + handleLen), handleThick)
+    drawHandleLine(Offset(cropR, cropT), Offset(cropR - handleLen, cropT))
+    drawHandleLine(Offset(cropR, cropT), Offset(cropR, cropT + handleLen))
 
-    drawLine(handleColor, Offset(cropL - 2f, cropB), Offset(cropL + handleLen, cropB), handleThick)
-    drawLine(handleColor, Offset(cropL, cropB + 2f), Offset(cropL, cropB + handleLen), handleThick)
+    drawHandleLine(Offset(cropL, cropB), Offset(cropL + handleLen, cropB))
+    drawHandleLine(Offset(cropL, cropB), Offset(cropL, cropB - handleLen))
 
-    drawLine(handleColor, Offset(cropR + 2f, cropB), Offset(cropR - handleLen, cropB), handleThick)
-    drawLine(handleColor, Offset(cropR, cropB + 2f), Offset(cropR, cropB - handleLen), handleThick)
+    drawHandleLine(Offset(cropR, cropB), Offset(cropR - handleLen, cropB))
+    drawHandleLine(Offset(cropR, cropB), Offset(cropR, cropB - handleLen))
 
     // Center edge handles
-    val edgeBarLen = 18f * density
+    val edgeBarLen = 20f * density
     val midX = (cropL + cropR) / 2f
     val midY = (cropT + cropB) / 2f
 
-    drawLine(handleColor, Offset(midX - edgeBarLen / 2f, cropT), Offset(midX + edgeBarLen / 2f, cropT), handleThick)
-    drawLine(handleColor, Offset(midX - edgeBarLen / 2f, cropB), Offset(midX + edgeBarLen / 2f, cropB), handleThick)
-    drawLine(handleColor, Offset(cropL, midY - edgeBarLen / 2f), Offset(cropL, midY + edgeBarLen / 2f), handleThick)
-    drawLine(handleColor, Offset(cropR, midY - edgeBarLen / 2f), Offset(cropR, midY + edgeBarLen / 2f), handleThick)
+    drawHandleLine(Offset(midX - edgeBarLen / 2f, cropT), Offset(midX + edgeBarLen / 2f, cropT))
+    drawHandleLine(Offset(midX - edgeBarLen / 2f, cropB), Offset(midX + edgeBarLen / 2f, cropB))
+    drawHandleLine(Offset(cropL, midY - edgeBarLen / 2f), Offset(cropL, midY + edgeBarLen / 2f))
+    drawHandleLine(Offset(cropR, midY - edgeBarLen / 2f), Offset(cropR, midY + edgeBarLen / 2f))
   }
 }
 
@@ -1320,84 +1362,174 @@ private fun findTouchedCropHandle(
   relY: Float,
   bounds: CropBounds,
   canvasWidth: Float,
-  canvasHeight: Float
-): CropHandle? {
-  val densityThreshold = 36f
-  val threshX = densityThreshold / canvasWidth.coerceAtLeast(1f)
-  val threshY = densityThreshold / canvasHeight.coerceAtLeast(1f)
+  canvasHeight: Float,
+  density: Float
+): CropHandle {
+  val touchPxX = relX * canvasWidth
+  val touchPxY = relY * canvasHeight
 
-  val isNearLeft = abs(relX - bounds.left) <= threshX
-  val isNearRight = abs(relX - bounds.right) <= threshX
-  val isNearTop = abs(relY - bounds.top) <= threshY
-  val isNearBottom = abs(relY - bounds.bottom) <= threshY
+  val cropLeftPx = bounds.left * canvasWidth
+  val cropTopPx = bounds.top * canvasHeight
+  val cropRightPx = bounds.right * canvasWidth
+  val cropBottomPx = bounds.bottom * canvasHeight
 
-  val isInsideX = relX >= (bounds.left - threshX) && relX <= (bounds.right + threshX)
-  val isInsideY = relY >= (bounds.top - threshY) && relY <= (bounds.bottom + threshY)
+  val cornerRadiusPx = 48f * density
+  val edgeRadiusPx = 36f * density
 
-  return when {
-    isNearLeft && isNearTop -> CropHandle.TOP_LEFT
-    isNearRight && isNearTop -> CropHandle.TOP_RIGHT
-    isNearLeft && isNearBottom -> CropHandle.BOTTOM_LEFT
-    isNearRight && isNearBottom -> CropHandle.BOTTOM_RIGHT
-    isNearTop && isInsideX -> CropHandle.TOP
-    isNearBottom && isInsideX -> CropHandle.BOTTOM
-    isNearLeft && isInsideY -> CropHandle.LEFT
-    isNearRight && isInsideY -> CropHandle.RIGHT
-    relX in bounds.left..bounds.right && relY in bounds.top..bounds.bottom -> CropHandle.INSIDE
-    else -> null
+  // 1. Check 4 corners (euclidean distance in pixels)
+  val distTopLeft = hypot(touchPxX - cropLeftPx, touchPxY - cropTopPx)
+  val distTopRight = hypot(touchPxX - cropRightPx, touchPxY - cropTopPx)
+  val distBottomLeft = hypot(touchPxX - cropLeftPx, touchPxY - cropBottomPx)
+  val distBottomRight = hypot(touchPxX - cropRightPx, touchPxY - cropBottomPx)
+
+  val minCornerDist = minOf(distTopLeft, distTopRight, distBottomLeft, distBottomRight)
+  if (minCornerDist <= cornerRadiusPx) {
+    return when (minCornerDist) {
+      distTopLeft -> CropHandle.TOP_LEFT
+      distTopRight -> CropHandle.TOP_RIGHT
+      distBottomLeft -> CropHandle.BOTTOM_LEFT
+      else -> CropHandle.BOTTOM_RIGHT
+    }
+  }
+
+  // 2. Check 4 edges (within edge bounds + radius)
+  val inXRange = touchPxX in (cropLeftPx - edgeRadiusPx)..(cropRightPx + edgeRadiusPx)
+  val inYRange = touchPxY in (cropTopPx - edgeRadiusPx)..(cropBottomPx + edgeRadiusPx)
+
+  val distTop = abs(touchPxY - cropTopPx)
+  val distBottom = abs(touchPxY - cropBottomPx)
+  val distLeft = abs(touchPxX - cropLeftPx)
+  val distRight = abs(touchPxX - cropRightPx)
+
+  if (inXRange && distTop <= edgeRadiusPx && distTop <= distBottom && distTop <= distLeft && distTop <= distRight) {
+    return CropHandle.TOP
+  }
+  if (inXRange && distBottom <= edgeRadiusPx && distBottom <= distLeft && distBottom <= distRight) {
+    return CropHandle.BOTTOM
+  }
+  if (inYRange && distLeft <= edgeRadiusPx && distLeft <= distRight) {
+    return CropHandle.LEFT
+  }
+  if (inYRange && distRight <= edgeRadiusPx) {
+    return CropHandle.RIGHT
+  }
+
+  // 3. Check if touch is outside the crop box (e.g. user tapping/dragging outside to enlarge outward)
+  val isOutsideLeft = touchPxX < cropLeftPx
+  val isOutsideRight = touchPxX > cropRightPx
+  val isOutsideTop = touchPxY < cropTopPx
+  val isOutsideBottom = touchPxY > cropBottomPx
+
+  if (isOutsideLeft && isOutsideTop) return CropHandle.TOP_LEFT
+  if (isOutsideRight && isOutsideTop) return CropHandle.TOP_RIGHT
+  if (isOutsideLeft && isOutsideBottom) return CropHandle.BOTTOM_LEFT
+  if (isOutsideRight && isOutsideBottom) return CropHandle.BOTTOM_RIGHT
+  if (isOutsideTop) return CropHandle.TOP
+  if (isOutsideBottom) return CropHandle.BOTTOM
+  if (isOutsideLeft) return CropHandle.LEFT
+  if (isOutsideRight) return CropHandle.RIGHT
+
+  // 4. Touch is inside the crop box
+  val innerMarginPx = 40f * density
+  val isDeepInside = (touchPxX >= cropLeftPx + innerMarginPx) &&
+      (touchPxX <= cropRightPx - innerMarginPx) &&
+      (touchPxY >= cropTopPx + innerMarginPx) &&
+      (touchPxY <= cropBottomPx - innerMarginPx)
+
+  if (isDeepInside) {
+    return CropHandle.INSIDE
+  }
+
+  // Pick nearest corner or edge
+  val minEdgeDist = minOf(distTop, distBottom, distLeft, distRight, distTopLeft, distTopRight, distBottomLeft, distBottomRight)
+  return when (minEdgeDist) {
+    distTopLeft -> CropHandle.TOP_LEFT
+    distTopRight -> CropHandle.TOP_RIGHT
+    distBottomLeft -> CropHandle.BOTTOM_LEFT
+    distBottomRight -> CropHandle.BOTTOM_RIGHT
+    distTop -> CropHandle.TOP
+    distBottom -> CropHandle.BOTTOM
+    distLeft -> CropHandle.LEFT
+    distRight -> CropHandle.RIGHT
+    else -> CropHandle.INSIDE
   }
 }
 
-private fun updateCropBoundsFromDelta(
+private fun updateCropBounds(
   start: CropBounds,
   handle: CropHandle,
-  deltaX: Float,
-  deltaY: Float
+  startPoint: Offset,
+  currentPoint: Offset,
+  canvasWidth: Float,
+  canvasHeight: Float,
+  density: Float
 ): CropBounds {
   val minSpan = 0.05f
+  val maxHandleDistX = (24f * density) / canvasWidth.coerceAtLeast(1f)
+  val maxHandleDistY = (24f * density) / canvasHeight.coerceAtLeast(1f)
+
   return when (handle) {
     CropHandle.TOP_LEFT -> {
-      val newL = (start.left + deltaX).coerceIn(0f, start.right - minSpan)
-      val newT = (start.top + deltaY).coerceIn(0f, start.bottom - minSpan)
+      val grabOffsetX = (startPoint.x - start.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - start.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, start.right - minSpan)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, start.bottom - minSpan)
       start.copy(left = newL, top = newT)
     }
     CropHandle.TOP_RIGHT -> {
-      val newR = (start.right + deltaX).coerceIn(start.left + minSpan, 1f)
-      val newT = (start.top + deltaY).coerceIn(0f, start.bottom - minSpan)
+      val grabOffsetX = (startPoint.x - start.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - start.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(start.left + minSpan, 1f)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, start.bottom - minSpan)
       start.copy(right = newR, top = newT)
     }
     CropHandle.BOTTOM_LEFT -> {
-      val newL = (start.left + deltaX).coerceIn(0f, start.right - minSpan)
-      val newB = (start.bottom + deltaY).coerceIn(start.top + minSpan, 1f)
+      val grabOffsetX = (startPoint.x - start.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - start.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, start.right - minSpan)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(start.top + minSpan, 1f)
       start.copy(left = newL, bottom = newB)
     }
     CropHandle.BOTTOM_RIGHT -> {
-      val newR = (start.right + deltaX).coerceIn(start.left + minSpan, 1f)
-      val newB = (start.bottom + deltaY).coerceIn(start.top + minSpan, 1f)
+      val grabOffsetX = (startPoint.x - start.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - start.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(start.left + minSpan, 1f)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(start.top + minSpan, 1f)
       start.copy(right = newR, bottom = newB)
     }
     CropHandle.TOP -> {
-      val newT = (start.top + deltaY).coerceIn(0f, start.bottom - minSpan)
+      val grabOffsetY = (startPoint.y - start.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, start.bottom - minSpan)
       start.copy(top = newT)
     }
     CropHandle.BOTTOM -> {
-      val newB = (start.bottom + deltaY).coerceIn(start.top + minSpan, 1f)
+      val grabOffsetY = (startPoint.y - start.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(start.top + minSpan, 1f)
       start.copy(bottom = newB)
     }
     CropHandle.LEFT -> {
-      val newL = (start.left + deltaX).coerceIn(0f, start.right - minSpan)
+      val grabOffsetX = (startPoint.x - start.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, start.right - minSpan)
       start.copy(left = newL)
     }
     CropHandle.RIGHT -> {
-      val newR = (start.right + deltaX).coerceIn(start.left + minSpan, 1f)
+      val grabOffsetX = (startPoint.x - start.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(start.left + minSpan, 1f)
       start.copy(right = newR)
     }
     CropHandle.INSIDE -> {
+      val deltaX = currentPoint.x - startPoint.x
+      val deltaY = currentPoint.y - startPoint.y
       val w = start.right - start.left
       val h = start.bottom - start.top
-      val newL = (start.left + deltaX).coerceIn(0f, 1f - w)
-      val newT = (start.top + deltaY).coerceIn(0f, 1f - h)
-      CropBounds(left = newL, top = newT, right = newL + w, bottom = newT + h)
+      val newL = (start.left + deltaX).coerceIn(0f, (1f - w).coerceAtLeast(0f))
+      val newT = (start.top + deltaY).coerceIn(0f, (1f - h).coerceAtLeast(0f))
+      CropBounds(
+        left = newL,
+        top = newT,
+        right = (newL + w).coerceAtMost(1f),
+        bottom = (newT + h).coerceAtMost(1f)
+      )
     }
   }
 }
