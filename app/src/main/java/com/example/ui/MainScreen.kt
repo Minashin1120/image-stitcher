@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.AlertDialog
@@ -79,8 +80,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.model.SeamConfig
 import com.example.model.StitchUiState
+import com.example.service.ScreenCaptureStateHolder
+import com.example.ui.components.CaptureActiveBanner
 import com.example.ui.components.ImageItemCard
 import com.example.ui.components.ResultView
+import com.example.ui.components.ScreenCaptureSheet
 import com.example.ui.components.SeamBadge
 import com.example.ui.components.SeamFineTuneDialog
 import com.example.ui.components.SettingsBottomSheet
@@ -88,17 +92,29 @@ import com.example.viewmodel.StitchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: StitchViewModel) {
+fun MainScreen(
+  viewModel: StitchViewModel,
+  onRequestStartCapture: (intervalMs: Long, deduplicate: Boolean, autoScroll: Boolean, scrollSpeed: Float) -> Unit = { _, _, _, _ -> },
+  onCaptureNow: () -> Unit = {},
+  onTogglePause: () -> Unit = {},
+  onToggleAutoScroll: () -> Unit = {},
+  onFinishAndStitch: () -> Unit = {},
+  onCancelCapture: () -> Unit = {}
+) {
   val context = LocalContext.current
   val images by viewModel.images.collectAsStateWithLifecycle()
   val seams by viewModel.seams.collectAsStateWithLifecycle()
   val settings by viewModel.settings.collectAsStateWithLifecycle()
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
+  val captureSessionState by ScreenCaptureStateHolder.sessionState.collectAsStateWithLifecycle()
 
   val snackbarHostState = remember { SnackbarHostState() }
   var showSettingsSheet by remember { mutableStateOf(false) }
   val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+  var showCaptureSheet by remember { mutableStateOf(false) }
+  val captureSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   var activeFineTunePairIndex by remember { mutableStateOf<Int?>(null) }
   var activeEditingImageIndex by remember { mutableStateOf<Int?>(null) }
@@ -250,6 +266,17 @@ fun MainScreen(viewModel: StitchViewModel) {
           }
         },
         actions = {
+          // Screen Capture Mode Button in Top Bar
+          IconButton(
+            onClick = { showCaptureSheet = true },
+            modifier = Modifier.testTag("btn_top_screen_capture")
+          ) {
+            Icon(
+              Icons.Default.ScreenShare,
+              contentDescription = stringResource(R.string.cd_screen_capture),
+              tint = if (captureSessionState.isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            )
+          }
           IconButton(
             onClick = {
               singlePhotoPickerLauncher.launch(
@@ -352,224 +379,254 @@ fun MainScreen(viewModel: StitchViewModel) {
       }
     }
   ) { innerPadding ->
-    Box(
+    Column(
       modifier = Modifier
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      if (images.isEmpty()) {
-        // Empty State Screen
-        EmptyStateView(
-          onPickImages = {
-            photoPickerLauncher.launch(
-              PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-          },
-          onPickSingleImageToEdit = {
-            singlePhotoPickerLauncher.launch(
-              PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-          }
-        )
-      } else {
-        // Image List with Seam Connectors
-        LazyColumn(
-          modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-          contentPadding = PaddingValues(vertical = 12.dp)
-        ) {
-          // Status Header
-          item {
-            Card(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-              colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-              ),
-              shape = RoundedCornerShape(14.dp)
-            ) {
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-              ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(
-                    Icons.Default.Collections,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                  )
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text(
-                    text = stringResource(R.string.header_queued_count, images.size),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                  )
-                }
+      // Active Capture Sticky Banner
+      CaptureActiveBanner(
+        sessionState = captureSessionState,
+        onClickBanner = { showCaptureSheet = true },
+        onCaptureNow = onCaptureNow,
+        onTogglePause = onTogglePause,
+        onToggleAutoScroll = onToggleAutoScroll,
+        onFinishAndStitch = onFinishAndStitch
+      )
 
-                TextButton(
-                  onClick = {
-                    photoPickerLauncher.launch(
-                      PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                  },
-                  modifier = Modifier.testTag("btn_add_more_header")
-                ) {
-                  Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(stringResource(R.string.btn_add))
-                }
-              }
-            }
-          }
-
-          itemsIndexed(images, key = { _, item -> item.id }) { index, item ->
-            ImageItemCard(
-              index = index,
-              totalCount = images.size,
-              item = item,
-              onEdit = { activeEditingImageIndex = index },
-              onMoveUp = { viewModel.moveImage(index, index - 1) },
-              onMoveDown = { viewModel.moveImage(index, index + 1) },
-              onRemove = { viewModel.removeImage(index) }
-            )
-
-            // Show Seam Badge connector between pairs
-            if (index < images.size - 1) {
-              val seam = seams.getOrNull(index) ?: SeamConfig()
-              SeamBadge(
-                index = index,
-                seam = seam,
-                onOpenFineTune = { activeFineTunePairIndex = index }
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .weight(1f)
+      ) {
+        if (images.isEmpty()) {
+          // Empty State Screen
+          EmptyStateView(
+            onPickImages = {
+              photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
               )
+            },
+            onPickSingleImageToEdit = {
+              singlePhotoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+              )
+            },
+            onOpenScreenCapture = {
+              showCaptureSheet = true
             }
-          }
-
-          // Single image hint if user only picked 1
-          if (images.size == 1) {
+          )
+        } else {
+          // Image List with Seam Connectors
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxSize()
+              .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
+          ) {
+            // Status Header
             item {
               Card(
                 modifier = Modifier
                   .fillMaxWidth()
-                  .padding(top = 16.dp),
+                  .padding(bottom = 12.dp),
                 colors = CardDefaults.cardColors(
-                  containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                  containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp)
               ) {
                 Row(
-                  modifier = Modifier.padding(16.dp),
-                  verticalAlignment = Alignment.CenterVertically
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                  Icon(
-                    Icons.Default.TouchApp,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary
-                  )
-                  Spacer(modifier = Modifier.width(12.dp))
-                  Text(
-                    text = stringResource(R.string.hint_single_image),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                  )
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                      Icons.Default.Collections,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.primary,
+                      modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                      text = stringResource(R.string.header_queued_count, images.size),
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                  }
+
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                      onClick = { showCaptureSheet = true },
+                      modifier = Modifier.testTag("btn_header_screen_capture")
+                    ) {
+                      Icon(Icons.Default.ScreenShare, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Text(stringResource(R.string.cd_screen_capture))
+                    }
+
+                    TextButton(
+                      onClick = {
+                        photoPickerLauncher.launch(
+                          PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                      },
+                      modifier = Modifier.testTag("btn_add_more_header")
+                    ) {
+                      Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Text(stringResource(R.string.btn_add))
+                    }
+                  }
                 }
               }
             }
-          }
 
-          item {
-            Spacer(modifier = Modifier.height(80.dp))
+            itemsIndexed(images, key = { _, item -> item.id }) { index, item ->
+              ImageItemCard(
+                index = index,
+                totalCount = images.size,
+                item = item,
+                onEdit = { activeEditingImageIndex = index },
+                onMoveUp = { viewModel.moveImage(index, index - 1) },
+                onMoveDown = { viewModel.moveImage(index, index + 1) },
+                onRemove = { viewModel.removeImage(index) }
+              )
+
+              // Show Seam Badge connector between pairs
+              if (index < images.size - 1) {
+                val seam = seams.getOrNull(index) ?: SeamConfig()
+                SeamBadge(
+                  index = index,
+                  seam = seam,
+                  onOpenFineTune = { activeFineTunePairIndex = index }
+                )
+              }
+            }
+
+            // Single image hint if user only picked 1
+            if (images.size == 1) {
+              item {
+                Card(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                  colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                  ),
+                  shape = RoundedCornerShape(12.dp)
+                ) {
+                  Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Icon(
+                      Icons.Default.TouchApp,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                      text = stringResource(R.string.hint_single_image),
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                  }
+                }
+              }
+            }
+
+            item {
+              Spacer(modifier = Modifier.height(80.dp))
+            }
           }
         }
-      }
 
-      // Processing / Detecting Dialog
-      when (val state = uiState) {
-        is StitchUiState.Detecting -> {
-          Surface(
-            modifier = Modifier
-              .align(Alignment.BottomCenter)
-              .padding(bottom = 90.dp, start = 20.dp, end = 20.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.inverseSurface,
-            tonalElevation = 6.dp
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-              verticalAlignment = Alignment.CenterVertically
+        // Processing / Detecting Dialog
+        when (val state = uiState) {
+          is StitchUiState.Detecting -> {
+            Surface(
+              modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 90.dp, start = 20.dp, end = 20.dp),
+              shape = RoundedCornerShape(16.dp),
+              color = MaterialTheme.colorScheme.inverseSurface,
+              tonalElevation = 6.dp
             ) {
-              CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                color = MaterialTheme.colorScheme.inversePrimary,
-                strokeWidth = 2.dp
-              )
-              Spacer(modifier = Modifier.width(14.dp))
-              Text(
-                text = stringResource(
-                  R.string.detecting_pair_progress,
-                  state.currentPair,
-                  state.totalPairs
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.inverseOnSurface
-              )
+              Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(20.dp),
+                  color = MaterialTheme.colorScheme.inversePrimary,
+                  strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(
+                  text = stringResource(
+                    R.string.detecting_pair_progress,
+                    state.currentPair,
+                    state.totalPairs
+                  ),
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.inverseOnSurface
+                )
+              }
             }
           }
-        }
 
-        is StitchUiState.Stitching -> {
-          AlertDialog(
-            onDismissRequest = {},
-            confirmButton = {},
-            title = {
-              Text(
-                stringResource(R.string.stitching_dialog_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-              )
-            },
-            text = {
-              Column(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-              ) {
-                LinearProgressIndicator(
-                  progress = { state.progress },
-                  modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+          is StitchUiState.Stitching -> {
+            AlertDialog(
+              onDismissRequest = {},
+              confirmButton = {},
+              title = {
                 Text(
-                  text = state.statusMessage,
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  stringResource(R.string.stitching_dialog_title),
+                  style = MaterialTheme.typography.titleMedium,
+                  fontWeight = FontWeight.Bold
                 )
+              },
+              text = {
+                Column(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                  horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                  LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth()
+                  )
+                  Spacer(modifier = Modifier.height(12.dp))
+                  Text(
+                    text = state.statusMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
               }
-            }
-          )
-        }
+            )
+          }
 
-        is StitchUiState.Error -> {
-          AlertDialog(
-            onDismissRequest = { viewModel.resetToEdit() },
-            title = { Text(stringResource(R.string.stitch_error_title)) },
-            text = { Text(state.message) },
-            confirmButton = {
-              Button(onClick = { viewModel.resetToEdit() }) {
-                Text(stringResource(R.string.btn_ok))
+          is StitchUiState.Error -> {
+            AlertDialog(
+              onDismissRequest = { viewModel.resetToEdit() },
+              title = { Text(stringResource(R.string.stitch_error_title)) },
+              text = { Text(state.message) },
+              confirmButton = {
+                Button(onClick = { viewModel.resetToEdit() }) {
+                  Text(stringResource(R.string.btn_ok))
+                }
               }
-            }
-          )
-        }
+            )
+          }
 
-        else -> {}
+          else -> {}
+        }
       }
     }
   }
@@ -603,12 +660,37 @@ fun MainScreen(viewModel: StitchViewModel) {
       onDismiss = { showSettingsSheet = false }
     )
   }
+
+  // Screen Capture Mode Bottom Sheet
+  if (showCaptureSheet) {
+    ScreenCaptureSheet(
+      sheetState = captureSheetState,
+      sessionState = captureSessionState,
+      onStartCapture = { intervalMs, deduplicate, autoScroll, scrollSpeed ->
+        onRequestStartCapture(intervalMs, deduplicate, autoScroll, scrollSpeed)
+        showCaptureSheet = false
+      },
+      onCaptureNow = onCaptureNow,
+      onTogglePause = onTogglePause,
+      onToggleAutoScroll = onToggleAutoScroll,
+      onFinishAndStitch = {
+        onFinishAndStitch()
+        showCaptureSheet = false
+      },
+      onCancelCapture = {
+        onCancelCapture()
+        showCaptureSheet = false
+      },
+      onDismiss = { showCaptureSheet = false }
+    )
+  }
 }
 
 @Composable
 private fun EmptyStateView(
   onPickImages: () -> Unit,
-  onPickSingleImageToEdit: () -> Unit
+  onPickSingleImageToEdit: () -> Unit,
+  onOpenScreenCapture: () -> Unit
 ) {
   Column(
     modifier = Modifier
@@ -621,19 +703,19 @@ private fun EmptyStateView(
     Surface(
       shape = CircleShape,
       color = MaterialTheme.colorScheme.primaryContainer,
-      modifier = Modifier.size(100.dp)
+      modifier = Modifier.size(90.dp)
     ) {
       Box(contentAlignment = Alignment.Center) {
         Icon(
           Icons.Default.AddPhotoAlternate,
           contentDescription = null,
           tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(48.dp)
+          modifier = Modifier.size(44.dp)
         )
       }
     }
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(20.dp))
 
     Text(
       text = stringResource(R.string.empty_title),
@@ -642,7 +724,7 @@ private fun EmptyStateView(
       textAlign = TextAlign.Center
     )
 
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     Text(
       text = stringResource(R.string.empty_description),
@@ -651,13 +733,37 @@ private fun EmptyStateView(
       textAlign = TextAlign.Center
     )
 
-    Spacer(modifier = Modifier.height(28.dp))
+    Spacer(modifier = Modifier.height(24.dp))
+
+    // Primary: Screen Capture Mode (Auto interval capture)
+    FilledTonalButton(
+      onClick = onOpenScreenCapture,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(54.dp)
+        .testTag("btn_empty_screen_capture_mode"),
+      shape = RoundedCornerShape(16.dp),
+      colors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+      )
+    ) {
+      Icon(Icons.Default.ScreenShare, contentDescription = null, modifier = Modifier.size(20.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        stringResource(R.string.btn_screen_capture_mode),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold
+      )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
 
     Button(
       onClick = onPickImages,
       modifier = Modifier
         .fillMaxWidth()
-        .height(54.dp)
+        .height(52.dp)
         .testTag("btn_pick_screenshots_main"),
       shape = RoundedCornerShape(16.dp)
     ) {
@@ -676,20 +782,20 @@ private fun EmptyStateView(
       onClick = onPickSingleImageToEdit,
       modifier = Modifier
         .fillMaxWidth()
-        .height(52.dp)
+        .height(48.dp)
         .testTag("btn_empty_edit_single_image"),
       shape = RoundedCornerShape(16.dp)
     ) {
-      Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
-      Spacer(modifier = Modifier.width(10.dp))
+      Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+      Spacer(modifier = Modifier.width(8.dp))
       Text(
         stringResource(R.string.btn_select_single_image_to_edit),
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold
       )
     }
 
-    Spacer(modifier = Modifier.height(28.dp))
+    Spacer(modifier = Modifier.height(24.dp))
 
     // Feature Highlights Row
     Card(
@@ -700,6 +806,10 @@ private fun EmptyStateView(
       shape = RoundedCornerShape(16.dp)
     ) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FeatureHintItem(
+          icon = Icons.Default.ScreenShare,
+          text = stringResource(R.string.capture_sheet_title) + " - " + stringResource(R.string.capture_interval_desc)
+        )
         FeatureHintItem(
           icon = Icons.Default.AutoAwesome,
           text = stringResource(R.string.feature_auto_detect)
@@ -737,3 +847,4 @@ private fun FeatureHintItem(
     )
   }
 }
+

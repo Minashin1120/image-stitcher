@@ -134,27 +134,12 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
       for (i in 0 until list.size - 1) {
         _uiState.value = StitchUiState.Detecting(currentPair = i + 1, totalPairs = list.size - 1)
 
-        val topThumb = list[i].thumbnail ?: StitchEngine.loadThumbnail(context, list[i].uri, 480)
-        val bottomThumb = list[i + 1].thumbnail ?: StitchEngine.loadThumbnail(context, list[i + 1].uri, 480)
+        val topItem = list[i]
+        val bottomItem = list[i + 1]
 
-        if (topThumb != null && bottomThumb != null && currentSettings.autoDetectOverlap) {
-          val detected = StitchEngine.detectOverlap(topThumb, bottomThumb, currentSettings)
-          // Scale detected overlap to original image resolution if thumb was smaller
-          val scaleRatio = if (topThumb.width > 0 && list[i].width > 0) {
-            list[i].width.toFloat() / topThumb.width
-          } else 1f
-
-          val scaledOverlap = (detected.autoOverlap * scaleRatio).roundToInt()
-          val scaledTopTrim = (detected.topTrim * scaleRatio).roundToInt()
-          val scaledBottomTrim = (detected.bottomTrim * scaleRatio).roundToInt()
-
-          newSeams.add(
-            detected.copy(
-              autoOverlap = scaledOverlap,
-              topTrim = if (currentSettings.removeStatusBar) currentSettings.statusBarHeightPx else scaledTopTrim,
-              bottomTrim = if (currentSettings.removeNavBar) currentSettings.navBarHeightPx else scaledBottomTrim
-            )
-          )
+        if (currentSettings.autoDetectOverlap) {
+          val detected = StitchEngine.detectOverlap(context, topItem, bottomItem, currentSettings)
+          newSeams.add(detected)
         } else {
           newSeams.add(
             SeamConfig(

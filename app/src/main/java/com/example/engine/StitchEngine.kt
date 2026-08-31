@@ -126,9 +126,40 @@ object StitchEngine {
     }
 
   /**
-   * Automatically detect overlap between top image (img1) and bottom image (img2).
-   * Robustly accounts for fixed/collapsible navigation bars, search bars, and headers (e.g. YouTube).
-   * Returns SeamConfig with autoOverlap in original pixel coordinates.
+   * High-accuracy overlap detection for ImageItems with support for headers, collapsible app bars,
+   * static bottom navigation bars, and transparent gesture navigation bars.
+   */
+  suspend fun detectOverlap(
+    context: Context,
+    topItem: ImageItem,
+    bottomItem: ImageItem,
+    settings: StitchGlobalSettings
+  ): SeamConfig = withContext(Dispatchers.Default) {
+    if (topItem.width == 0 || topItem.height == 0 || bottomItem.width == 0 || bottomItem.height == 0) {
+      return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
+    }
+
+    val matchWidth = 360
+    val topThumb = topItem.thumbnail ?: loadThumbnail(context, topItem.uri, matchWidth)
+    val bottomThumb = bottomItem.thumbnail ?: loadThumbnail(context, bottomItem.uri, matchWidth)
+
+    if (topThumb == null || bottomThumb == null) {
+      return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
+    }
+
+    detectOverlapInternal(
+      topBitmap = topThumb,
+      bottomBitmap = bottomThumb,
+      settings = settings,
+      origWidth1 = topItem.width,
+      origHeight1 = topItem.height,
+      origWidth2 = bottomItem.width,
+      origHeight2 = bottomItem.height
+    )
+  }
+
+  /**
+   * Overlap detection fallback using direct Bitmaps.
    */
   suspend fun detectOverlap(
     topBitmap: Bitmap,
@@ -139,173 +170,212 @@ object StitchEngine {
       return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
     }
 
-    // Step 1: Normalize scale for comparison
-    val matchWidth = 240
+    detectOverlapInternal(
+      topBitmap = topBitmap,
+      bottomBitmap = bottomBitmap,
+      settings = settings,
+      origWidth1 = topBitmap.width,
+      origHeight1 = topBitmap.height,
+      origWidth2 = bottomBitmap.width,
+      origHeight2 = bottomBitmap.height
+    )
+  }
+
+  private fun detectOverlapInternal(
+    topBitmap: Bitmap,
+    bottomBitmap: Bitmap,
+    settings: StitchGlobalSettings,
+    origWidth1: Int,
+    origHeight1: Int,
+    origWidth2: Int,
+    origHeight2: Int
+  ): SeamConfig {
+    val matchWidth = 360
     val scale1 = matchWidth.toFloat() / topBitmap.width
     val scale2 = matchWidth.toFloat() / bottomBitmap.width
 
-    val h1 = (topBitmap.height * scale1).roundToInt()
-    val h2 = (bottomBitmap.height * scale2).roundToInt()
+    val h1 = (topBitmap.height * scale1).roundToInt().coerceAtLeast(20)
+    val h2 = (bottomBitmap.height * scale2).roundToInt().coerceAtLeast(20)
 
-    if (h1 < 20 || h2 < 20) {
-      return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
+    val scaled1 = if (topBitmap.width == matchWidth && topBitmap.height == h1) {
+      topBitmap
+    } else {
+      Bitmap.createScaledBitmap(topBitmap, matchWidth, h1, true)
     }
-
-    val scaled1 = Bitmap.createScaledBitmap(topBitmap, matchWidth, h1, true)
-    val scaled2 = Bitmap.createScaledBitmap(bottomBitmap, matchWidth, h2, true)
+    val scaled2 = if (bottomBitmap.width == matchWidth && bottomBitmap.height == h2) {
+      bottomBitmap
+    } else {
+      Bitmap.createScaledBitmap(bottomBitmap, matchWidth, h2, true)
+    }
 
     val gray1 = extractGrayscaleMatrix(scaled1)
     val gray2 = extractGrayscaleMatrix(scaled2)
 
-    // Detect static / pinned header between top and bottom images (e.g. status bar + fixed app bar)
+    val scaleRatioY1 = origHeight1.toFloat() / h1
+    val scaleRatioY2 = origHeight2.toFloat() / h2
+
+    // 1. Detect static top headers (status bar + app bar identical in both images)
     val maxHeaderCheckRows = min(h1, h2) * 35 / 100
-    val staticHeaderRows = detectStaticHeaderRows(gray1, gray2, matchWidth, maxHeaderCheckRows)
+    val staticTopRows = detectStaticTopRows(gray1, gray2, matchWidth, maxHeaderCheckRows)
 
-    val statusBarTrimScaled = if (settings.removeStatusBar) (settings.statusBarHeightPx * scale2).roundToInt() else 0
-    val navBarTrimScaled = if (settings.removeNavBar) (settings.navBarHeightPx * scale1).roundToInt() else 0
+    // 2. Detect static bottom navigation bar (e.g. YouTube bottom 5-tab bar, Chrome bottom bar)
+    val maxFooterCheckRows = min(h1, h2) * 30 / 100
+    val staticBottomRows = detectStaticBottomRows(gray1, gray2, matchWidth, maxFooterCheckRows)
 
-    // Header cutoffs in scaled space
-    // If a static header is detected (e.g., identical YouTube app bar / search bar in both images),
-    // scrolling content starts below this static header.
-    val header1Scaled = max(statusBarTrimScaled, staticHeaderRows)
-    val header2Scaled = max(statusBarTrimScaled, staticHeaderRows)
-    val footer1Scaled = navBarTrimScaled
-    val footer2Scaled = navBarTrimScaled
+    // 3. Detect transparent navigation bar with gesture pill / handle
+    val gesturePillRows1 = detectTransparentNavBarPill(gray1, matchWidth, h1)
+    val gesturePillRows2 = detectTransparentNavBarPill(gray2, matchWidth, h2)
 
-    // Step 2: Search for vertical scroll displacement `shift = y1 - y2`
-    // (i.e. pixel y2 in bottom image corresponds to pixel y1 = y2 + shift in top image)
-    val minShift = max(6, (min(h1, h2) * 0.04).roundToInt())
-    val maxShift = (h1 - header1Scaled - footer1Scaled - 8).coerceAtLeast(minShift + 1)
+    val statusBarTrimScaled = if (settings.removeStatusBar) {
+      (settings.statusBarHeightPx / scaleRatioY2).roundToInt()
+    } else {
+      (h2 * 0.035f).roundToInt()
+    }
+
+    val navBarTrimScaled = if (settings.removeNavBar) {
+      (settings.navBarHeightPx / scaleRatioY1).roundToInt()
+    } else 0
+
+    val topInset1 = maxOf(staticTopRows, statusBarTrimScaled)
+    val bottomInset1 = maxOf(staticBottomRows, gesturePillRows1, navBarTrimScaled)
+    val topInset2 = maxOf(staticTopRows, statusBarTrimScaled)
+    val bottomInset2 = maxOf(staticBottomRows, gesturePillRows2, navBarTrimScaled)
+
+    // 4. Search for vertical scroll displacement `shift` where y1 = y2 + shift
+    // For collapsible headers (e.g. YouTube top bar collapsing on scroll):
+    // In image 1, top header can be topInset1 or larger if an app bar collapsed in image 2.
+    val minShift = max(4, (min(h1, h2) * 0.03f).roundToInt())
+    val maxShift = (h1 - topInset1 - bottomInset1 - 4).coerceAtLeast(minShift + 1)
+
+    // Candidate header start heights in image 1 (to handle collapsible headers)
+    val header1Candidates = mutableListOf(topInset1)
+    val appHeaderExtra1 = (h1 * 0.055f).roundToInt()
+    val appHeaderExtra2 = (h1 * 0.095f).roundToInt()
+    val appHeaderExtra3 = (h1 * 0.140f).roundToInt()
+    if (topInset1 + appHeaderExtra1 < h1 / 2) header1Candidates.add(topInset1 + appHeaderExtra1)
+    if (topInset1 + appHeaderExtra2 < h1 / 2) header1Candidates.add(topInset1 + appHeaderExtra2)
+    if (topInset1 + appHeaderExtra3 < h1 / 2) header1Candidates.add(topInset1 + appHeaderExtra3)
 
     var bestShiftScaled = 0
-    var minDifference = Double.MAX_VALUE
-    var bestVariance = 0.0
+    var bestScore = Double.MAX_VALUE
+    var bestHeader1 = topInset1
+    var bestAvgDiff = Double.MAX_VALUE
 
-    // Precalculate row means for fast candidate evaluation
-    val rowMeans1 = DoubleArray(h1) { y ->
-      var sum = 0.0
-      val row = gray1[y]
-      for (x in 0 until matchWidth step 4) sum += row[x]
-      sum / (matchWidth / 4)
-    }
-    val rowMeans2 = DoubleArray(h2) { y ->
-      var sum = 0.0
-      val row = gray2[y]
-      for (x in 0 until matchWidth step 4) sum += row[x]
-      sum / (matchWidth / 4)
-    }
+    for (head1 in header1Candidates) {
+      for (shift in minShift..maxShift) {
+        val y2Start = max(topInset2, head1 - shift)
+        val y2End = min(h2 - bottomInset2, h1 - bottomInset1 - shift)
+        val overlapRows = y2End - y2Start
 
-    for (shift in minShift..maxShift) {
-      // In bottom image (gray2), content can start at header2Scaled (or 0 if header collapsed),
-      // and must map to a valid content row in top image (gray1) >= header1Scaled.
-      val y2Start = max(header2Scaled, header1Scaled - shift)
-      val y2End = min(h2 - footer2Scaled, h1 - footer1Scaled - shift)
-      val overlapRows = y2End - y2Start
+        if (overlapRows < 14) continue
 
-      if (overlapRows < 12) continue
+        var totalDiff = 0.0
+        var varianceSum = 0.0
+        var samples = 0
 
-      var totalDiff = 0.0
-      var varianceSum = 0.0
-      var samples = 0
+        val stepY = if (overlapRows > 70) 2 else 1
+        val stepX = 4
 
-      val stepY = if (overlapRows > 80) 2 else 1
+        for (y2 in y2Start until y2End step stepY) {
+          val y1 = y2 + shift
+          val r1 = gray1[y1]
+          val r2 = gray2[y2]
 
-      for (y2 in y2Start until y2End step stepY) {
-        val y1 = y2 + shift
-        val r1 = gray1[y1]
-        val r2 = gray2[y2]
-        val m1 = rowMeans1[y1]
-        val m2 = rowMeans2[y2]
-
-        val rowMeanDiff = abs(m1 - m2)
-        if (rowMeanDiff > 45.0) {
-          // Fast skip if entire row mean is completely mismatched
-          totalDiff += rowMeanDiff * (matchWidth / 4)
-          samples += (matchWidth / 4)
-          continue
+          for (x in 0 until matchWidth step stepX) {
+            val v1 = r1[x]
+            val v2 = r2[x]
+            totalDiff += abs(v1 - v2)
+            val dev = v2 - 128
+            varianceSum += dev * dev
+            samples++
+          }
         }
 
-        var rowVar = 0.0
-        val count = matchWidth / 4
-        for (x in 0 until matchWidth step 4) {
-          val v1 = r1[x]
-          val v2 = r2[x]
-          val d = abs(v1 - v2)
-          totalDiff += d
-          val dev = v2 - m2
-          rowVar += dev * dev
-          samples++
-        }
-        varianceSum += rowVar / count
-      }
+        if (samples > 0) {
+          val avgDiff = totalDiff / samples
+          val avgVar = varianceSum / samples
+          // Favor low difference and penalize low-variance/flat zones
+          val score = avgDiff / (1.0 + min(avgVar / 2000.0, 3.0))
 
-      if (samples > 0) {
-        val avgDiff = totalDiff / samples
-        val avgVar = varianceSum / ((overlapRows / stepY) + 1)
-        // Score favors low difference and penalizes flat/blank regions
-        val score = avgDiff / (1.0 + min(avgVar / 100.0, 5.0))
-
-        if (score < minDifference) {
-          minDifference = score
-          bestShiftScaled = shift
-          bestVariance = avgVar
+          if (score < bestScore) {
+            bestScore = score
+            bestShiftScaled = shift
+            bestHeader1 = head1
+            bestAvgDiff = avgDiff
+          }
         }
       }
     }
 
-    if (bestShiftScaled <= 0 || minDifference > 50.0) {
+    if (bestShiftScaled <= 0 || bestAvgDiff > 45.0) {
       // Fallback: No robust overlap detected
-      return@withContext SeamConfig(
+      val fallbackTopTrim = if (settings.removeStatusBar) settings.statusBarHeightPx else 0
+      val fallbackBottomTrim = if (settings.removeNavBar) settings.navBarHeightPx else 0
+      return SeamConfig(
         autoOverlap = 0,
         confidence = 0f,
         isAutoDetected = true,
-        topTrim = if (settings.removeStatusBar) settings.statusBarHeightPx else 0,
-        bottomTrim = if (settings.removeNavBar) settings.navBarHeightPx else 0
+        topTrim = fallbackTopTrim,
+        bottomTrim = fallbackBottomTrim
       )
     }
 
-    // Step 3: Full-Resolution Fine Verification and Refinement
-    val initialEstimatedShift = (bestShiftScaled / scale1).roundToInt()
-    val topTrimFullRes = if (settings.removeStatusBar) settings.statusBarHeightPx else 0
-    val bottomTrimFullRes = if (settings.removeNavBar) settings.navBarHeightPx else 0
-    val staticHeaderFullRes = (staticHeaderRows / scale2).roundToInt()
-    val headerCutoffFullRes = max(topTrimFullRes, staticHeaderFullRes)
+    // Convert to original full-resolution space
+    val fullShift = (bestShiftScaled * scaleRatioY1).roundToInt()
+    val fullTopInset1 = (bestHeader1 * scaleRatioY1).roundToInt()
+    var fullBottomInset1 = (bottomInset1 * scaleRatioY1).roundToInt()
+    var fullTopInset2 = (topInset2 * scaleRatioY2).roundToInt()
+    var fullBottomInset2 = (bottomInset2 * scaleRatioY2).roundToInt()
 
-    val fineShiftResult = refineShiftFullRes(
-      topBitmap = topBitmap,
-      bottomBitmap = bottomBitmap,
-      initialShift = initialEstimatedShift,
-      headerCutoff = headerCutoffFullRes,
-      bottomTrim = bottomTrimFullRes
-    )
+    if (settings.removeStatusBar) {
+      fullTopInset2 = max(fullTopInset2, settings.statusBarHeightPx)
+    }
+    if (settings.removeNavBar) {
+      fullBottomInset1 = max(fullBottomInset1, settings.navBarHeightPx)
+      fullBottomInset2 = max(fullBottomInset2, settings.navBarHeightPx)
+    }
 
-    val finalShift = fineShiftResult.first
-    val confidence = fineShiftResult.second
+    // Calculate exact seamless cut positions:
+    // In image 1, we want content up to y1Cut (excluding the bottom bar).
+    // In image 2, content starts at y2Cut = y1Cut - fullShift (excluding the top bar & overlap).
+    val y1TargetCut = origHeight1 - fullBottomInset1
+    var y2Cut = y1TargetCut - fullShift
+    var y1Cut = y1TargetCut
 
-    // Calculate cut points:
-    // In bottomBitmap, the slice starts at y2_cut.
-    // y2_cut MUST be at least headerCutoffFullRes to completely remove the top navigation bar / header!
-    val y2Cut = (topBitmap.height - bottomTrimFullRes - finalShift).coerceAtLeast(headerCutoffFullRes)
-    val y1Cut = min(topBitmap.height - bottomTrimFullRes, y2Cut + finalShift)
+    if (y2Cut < fullTopInset2) {
+      y2Cut = fullTopInset2
+      y1Cut = y2Cut + fullShift
+    }
 
-    // autoOverlap is the amount of top pixels cropped from bottomBitmap beyond topTrim
-    val autoOverlap = (y2Cut - topTrimFullRes).coerceAtLeast(0)
-    val bottomTrim = (topBitmap.height - y1Cut).coerceAtLeast(bottomTrimFullRes)
+    y1Cut = y1Cut.coerceIn(fullTopInset1 + 1, origHeight1 - fullBottomInset1)
+    y2Cut = (y1Cut - fullShift).coerceIn(fullTopInset2, origHeight2 - 1)
 
-    SeamConfig(
+    val topTrim = fullTopInset2
+    val autoOverlap = (y2Cut - topTrim).coerceAtLeast(0)
+    val bottomTrim = (origHeight1 - y1Cut).coerceAtLeast(fullBottomInset1)
+
+    val confidence = when {
+      bestAvgDiff < 7.0 -> 0.98f
+      bestAvgDiff < 14.0 -> 0.92f
+      bestAvgDiff < 24.0 -> 0.80f
+      bestAvgDiff < 36.0 -> 0.60f
+      else -> 0.35f
+    }
+
+    return SeamConfig(
       autoOverlap = autoOverlap,
       confidence = confidence,
       isAutoDetected = true,
-      topTrim = topTrimFullRes,
+      topTrim = topTrim,
       bottomTrim = bottomTrim
     )
   }
 
   /**
-   * Detects contiguous static header rows (e.g. status bar + fixed navigation bar/app bar)
+   * Detects contiguous static header rows (e.g. status bar + app bar)
    * that remain identical at the top of both screenshots.
    */
-  private fun detectStaticHeaderRows(
+  private fun detectStaticTopRows(
     gray1: Array<IntArray>,
     gray2: Array<IntArray>,
     width: Int,
@@ -316,90 +386,126 @@ object StitchEngine {
       val r1 = gray1[y]
       val r2 = gray2[y]
       var diffSum = 0
-      val count = width / 4
-      for (x in 0 until width step 4) {
+      val count = width / 2
+      for (x in 0 until width step 2) {
         diffSum += abs(r1[x] - r2[x])
       }
       val avgDiff = diffSum.toDouble() / count
-      if (avgDiff < 6.0) {
+      if (avgDiff < 7.5) {
         staticCount = y + 1
-      } else if (y > 10 && staticCount < y - 3) {
-        // Stop checking if non-static rows have started
+      } else if (y > 8 && staticCount < y - 2) {
         break
       }
     }
     return staticCount
   }
 
-  private fun refineShiftFullRes(
-    topBitmap: Bitmap,
-    bottomBitmap: Bitmap,
-    initialShift: Int,
-    headerCutoff: Int,
-    bottomTrim: Int
-  ): Pair<Int, Float> {
-    val searchRadius = 28
-    val minCandidate = max(10, initialShift - searchRadius)
-    val maxCandidate = min(topBitmap.height - headerCutoff - 10, initialShift + searchRadius)
+  /**
+   * Detects contiguous static bottom navigation bar rows (e.g. YouTube bottom tab bar,
+   * 3-button navigation bar, browser bottom toolbar) identical at the bottom of both screenshots.
+   */
+  private fun detectStaticBottomRows(
+    gray1: Array<IntArray>,
+    gray2: Array<IntArray>,
+    width: Int,
+    maxRows: Int
+  ): Int {
+    val h1 = gray1.size
+    val h2 = gray2.size
+    var staticCount = 0
+    val count = width / 2
 
-    val sampleWidth = min(topBitmap.width, bottomBitmap.width)
-    if (sampleWidth <= 0) return Pair(initialShift, 0.5f)
+    for (i in 0 until maxRows) {
+      val y1 = h1 - 1 - i
+      val y2 = h2 - 1 - i
+      if (y1 < 0 || y2 < 0) break
 
-    var bestShift = initialShift
-    var minDiff = Double.MAX_VALUE
-    var matchedVariance = 0.0
-
-    val strideX = max(1, sampleWidth / 64)
-    val strideY = 2
-
-    for (shift in minCandidate..maxCandidate) {
-      val y2Start = max(headerCutoff, 0)
-      val y2End = min(bottomBitmap.height - bottomTrim, topBitmap.height - bottomTrim - shift)
-      val overlap = y2End - y2Start
-
-      if (overlap < 20) continue
-
-      var totalDiff = 0.0
-      var samples = 0
-      var varAcc = 0.0
-
-      for (y2 in y2Start until y2End step strideY) {
-        val y1 = y2 + shift
-        if (y1 !in 0 until topBitmap.height) continue
-
-        for (x in 0 until sampleWidth step strideX) {
-          val p1 = topBitmap.getPixel(x, y1)
-          val p2 = bottomBitmap.getPixel(x, y2)
-
-          val lum1 = (Color.red(p1) * 299 + Color.green(p1) * 587 + Color.blue(p1) * 114) / 1000
-          val lum2 = (Color.red(p2) * 299 + Color.green(p2) * 587 + Color.blue(p2) * 114) / 1000
-
-          val diff = abs(lum1 - lum2)
-          totalDiff += diff
-          varAcc += abs(lum2 - 128)
-          samples++
-        }
+      val r1 = gray1[y1]
+      val r2 = gray2[y2]
+      var diffSum = 0
+      for (x in 0 until width step 2) {
+        diffSum += abs(r1[x] - r2[x])
       }
+      val avgDiff = diffSum.toDouble() / count
+      if (avgDiff < 7.5) {
+        staticCount = i + 1
+      } else if (i > 4 && staticCount < i - 2) {
+        break
+      }
+    }
+    return staticCount
+  }
 
-      if (samples > 0) {
-        val avgDiff = totalDiff / samples
-        if (avgDiff < minDiff) {
-          minDiff = avgDiff
-          bestShift = shift
-          matchedVariance = varAcc / samples
+  /**
+   * Detects transparent navigation bar overlay (gesture navigation handle / pill)
+   * in modern Android edge-to-edge screenshots.
+   */
+  private fun detectTransparentNavBarPill(
+    gray: Array<IntArray>,
+    width: Int,
+    height: Int
+  ): Int {
+    val checkRangeStart = (height * 0.92f).toInt().coerceAtLeast(0)
+    val checkRangeEnd = (height * 0.985f).toInt().coerceAtMost(height - 1)
+    if (checkRangeStart >= checkRangeEnd) return 0
+
+    val pillMinLen = (width * 0.14f).toInt()
+    val pillMaxLen = (width * 0.45f).toInt()
+
+    for (y in checkRangeStart..checkRangeEnd) {
+      val row = gray[y]
+      var inPill = false
+      var pillStart = 0
+      var pillEnd = 0
+      var pillLumSum = 0
+
+      for (x in (width * 0.20f).toInt()..(width * 0.80f).toInt()) {
+        val lum = row[x]
+        val isPillCandidate = lum >= 165 || lum <= 85
+        if (isPillCandidate) {
+          if (!inPill) {
+            inPill = true
+            pillStart = x
+            pillLumSum = lum
+          } else {
+            pillLumSum += lum
+          }
+          pillEnd = x
+        } else {
+          if (inPill) {
+            val len = pillEnd - pillStart + 1
+            if (len in pillMinLen..pillMaxLen) {
+              val midX = (pillStart + pillEnd) / 2
+              if (abs(midX - width / 2) < width * 0.08f) {
+                val prevY = (y - 4).coerceAtLeast(0)
+                val nextY = (y + 4).coerceAtMost(height - 1)
+                val avgPillLum = pillLumSum.toDouble() / len
+                var prevSum = 0
+                var nextSum = 0
+                for (px in pillStart..pillEnd) {
+                  prevSum += gray[prevY][px]
+                  nextSum += gray[nextY][px]
+                }
+                val prevLum = prevSum.toDouble() / len
+                val nextLum = nextSum.toDouble() / len
+
+                if (abs(avgPillLum - prevLum) > 16.0 || abs(avgPillLum - nextLum) > 16.0) {
+                  return (height - y + 6).coerceAtLeast(6)
+                }
+              }
+            }
+            inPill = false
+          }
         }
       }
     }
 
-    val confidence = when {
-      minDiff < 7.0 && matchedVariance > 12.0 -> 0.98f
-      minDiff < 14.0 -> 0.90f
-      minDiff < 24.0 -> 0.75f
-      minDiff < 38.0 -> 0.55f
-      else -> 0.25f
+    // Default gesture nav bar inset on tall modern smartphones (aspect ratio >= 1.85)
+    if (height.toFloat() / width.toFloat() >= 1.85f) {
+      return (height * 0.024f).roundToInt().coerceIn(6, 18)
     }
 
-    return Pair(bestShift, confidence)
+    return 0
   }
 
   private fun extractGrayscaleMatrix(bitmap: Bitmap): Array<IntArray> {
@@ -411,10 +517,11 @@ object StitchEngine {
     val matrix = Array(height) { IntArray(width) }
     for (y in 0 until height) {
       val rowOffset = y * width
+      val row = matrix[y]
       for (x in 0 until width) {
         val c = pixels[rowOffset + x]
         val lum = (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
-        matrix[y][x] = lum
+        row[x] = lum
       }
     }
     return matrix
@@ -422,6 +529,7 @@ object StitchEngine {
 
   /**
    * Stitches multiple images in sequence into a single seamless output file.
+   * Completely eliminates leftover bottom navigation bars and duplicate headers.
    */
   suspend fun stitchImages(
     context: Context,
@@ -462,25 +570,29 @@ object StitchEngine {
         val seamBefore = if (i > 0) seams.getOrNull(i - 1) ?: SeamConfig() else null
         val seamAfter = if (i < bitmaps.size - 1) seams.getOrNull(i) ?: SeamConfig() else null
 
-        // Crop top if following previous image with overlap
+        // Crop top:
+        // For image 0: remove status bar if enabled.
+        // For image i > 0: crop seamBefore.topTrim + seamBefore.totalOverlap!
         val cropTop: Int = if (i == 0) {
           if (settings.removeStatusBar) settings.statusBarHeightPx.coerceAtMost(bmp.height / 4) else 0
         } else {
           val overlap = seamBefore?.totalOverlap ?: 0
           val topTrim = seamBefore?.topTrim ?: 0
-          (overlap + topTrim).coerceAtMost(bmp.height - 1)
+          (overlap + topTrim).coerceIn(0, bmp.height - 1)
         }
 
-        // Crop bottom if preceding next image
+        // Crop bottom:
+        // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (excludes bottom nav bar).
+        // For the last image (i == bitmaps.size - 1): crop nav bar if enabled.
         val cropBottom: Int = if (i == bitmaps.size - 1) {
           if (settings.removeNavBar) settings.navBarHeightPx.coerceAtMost(bmp.height / 4) else 0
         } else {
           val bottomTrim = seamAfter?.bottomTrim ?: 0
-          bottomTrim.coerceAtMost(bmp.height - 1)
+          bottomTrim.coerceIn(0, bmp.height - cropTop - 1)
         }
 
         val sliceHeight = (bmp.height - cropTop - cropBottom).coerceAtLeast(1)
-        val srcRect = Rect(0, cropTop, bmp.width, bmp.height - cropBottom)
+        val srcRect = Rect(0, cropTop, bmp.width, cropTop + sliceHeight)
         val dstRect = Rect(0, totalHeight, targetWidth, totalHeight + sliceHeight)
 
         drawOperations.add(DrawOp(bitmap = bmp, srcRect = srcRect, dstRect = dstRect))
