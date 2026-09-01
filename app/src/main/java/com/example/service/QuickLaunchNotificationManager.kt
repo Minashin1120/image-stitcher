@@ -45,14 +45,15 @@ object QuickLaunchNotificationManager {
 
     // Tap action: open overlay if permitted, else open MainActivity
     val contentIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(context)) {
-      val overlayIntent = Intent(context, OverlayService::class.java).apply {
-        action = OverlayService.ACTION_SHOW_OVERLAY
-        putExtra(OverlayService.EXTRA_EXPAND_SETTINGS, true)
+      val overlayTrampolineIntent = Intent(context, CapturePromptActivity::class.java).apply {
+        action = CapturePromptActivity.ACTION_SHOW_OVERLAY
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+        putExtra(CapturePromptActivity.EXTRA_EXPAND_SETTINGS, true)
       }
-      PendingIntent.getService(
+      PendingIntent.getActivity(
         context,
         10,
-        overlayIntent,
+        overlayTrampolineIntent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       )
     } else {
@@ -67,15 +68,16 @@ object QuickLaunchNotificationManager {
       )
     }
 
-    // Action 1: ⚙️ Controls / Settings Overlay
-    val overlayIntent = Intent(context, OverlayService::class.java).apply {
-      action = OverlayService.ACTION_SHOW_OVERLAY
-      putExtra(OverlayService.EXTRA_EXPAND_SETTINGS, true)
+    // Action 1: ⚙️ Controls / Settings Overlay (uses Activity trampoline so notification shade closes automatically)
+    val overlayActionIntent = Intent(context, CapturePromptActivity::class.java).apply {
+      action = CapturePromptActivity.ACTION_SHOW_OVERLAY
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+      putExtra(CapturePromptActivity.EXTRA_EXPAND_SETTINGS, true)
     }
-    val overlayPendingIntent = PendingIntent.getService(
+    val overlayPendingIntent = PendingIntent.getActivity(
       context,
       11,
-      overlayIntent,
+      overlayActionIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 

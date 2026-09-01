@@ -20,11 +20,15 @@ import com.example.service.ScreenCaptureService
 class CapturePromptActivity : ComponentActivity() {
 
   companion object {
+    const val ACTION_SHOW_OVERLAY = "com.example.ui.action.SHOW_OVERLAY"
+    const val ACTION_START_DIRECT_CAPTURE = "com.example.ui.action.START_DIRECT_CAPTURE"
+
     const val EXTRA_INTERVAL_MS = "extra_interval_ms"
     const val EXTRA_DEDUPLICATE = "extra_deduplicate"
     const val EXTRA_AUTO_SCROLL = "extra_auto_scroll"
     const val EXTRA_SCROLL_SPEED = "extra_scroll_speed"
     const val EXTRA_SHOW_OVERLAY = "extra_show_overlay"
+    const val EXTRA_EXPAND_SETTINGS = "extra_expand_settings"
 
     fun startDirectCapture(
       context: Context,
@@ -35,12 +39,22 @@ class CapturePromptActivity : ComponentActivity() {
       showOverlay: Boolean = true
     ) {
       val intent = Intent(context, CapturePromptActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        action = ACTION_START_DIRECT_CAPTURE
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
         putExtra(EXTRA_INTERVAL_MS, intervalMs)
         putExtra(EXTRA_DEDUPLICATE, autoDeduplicate)
         putExtra(EXTRA_AUTO_SCROLL, autoScroll)
         putExtra(EXTRA_SCROLL_SPEED, scrollSpeed)
         putExtra(EXTRA_SHOW_OVERLAY, showOverlay)
+      }
+      context.startActivity(intent)
+    }
+
+    fun showOverlayViaTrampoline(context: Context, expandSettings: Boolean = false) {
+      val intent = Intent(context, CapturePromptActivity::class.java).apply {
+        action = ACTION_SHOW_OVERLAY
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+        putExtra(EXTRA_EXPAND_SETTINGS, expandSettings)
       }
       context.startActivity(intent)
     }
@@ -60,13 +74,7 @@ class CapturePromptActivity : ComponentActivity() {
     } else {
       Toast.makeText(this, getString(R.string.msg_stitch_failed), Toast.LENGTH_SHORT).show()
     }
-    finish()
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-    } else {
-      @Suppress("DEPRECATION")
-      overridePendingTransition(0, 0)
-    }
+    finishQuickly()
   }
 
   private val notificationPermissionLauncher = registerForActivityResult(
@@ -77,6 +85,20 @@ class CapturePromptActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    if (intent?.action == ACTION_SHOW_OVERLAY) {
+      val expand = intent.getBooleanExtra(EXTRA_EXPAND_SETTINGS, false)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+        OverlayService.showOverlay(this, expandSettings = expand)
+      } else {
+        val mainIntent = Intent(this, com.example.MainActivity::class.java).apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        startActivity(mainIntent)
+      }
+      finishQuickly()
+      return
+    }
 
     intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 1000L)
     autoDeduplicate = intent.getBooleanExtra(EXTRA_DEDUPLICATE, true)
@@ -92,6 +114,16 @@ class CapturePromptActivity : ComponentActivity() {
     }
 
     launchMediaProjectionIntent()
+  }
+
+  private fun finishQuickly() {
+    finish()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+    } else {
+      @Suppress("DEPRECATION")
+      overridePendingTransition(0, 0)
+    }
   }
 
   private fun launchMediaProjectionIntent() {

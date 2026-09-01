@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -29,6 +31,8 @@ class OverlayService : Service() {
     const val ACTION_HIDE_OVERLAY = "com.example.service.action.HIDE_OVERLAY"
     const val EXTRA_EXPAND_SETTINGS = "extra_expand_settings"
 
+    private var instance: OverlayService? = null
+
     fun showOverlay(context: Context, expandSettings: Boolean = false) {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
         return
@@ -46,8 +50,17 @@ class OverlayService : Service() {
       }
       context.startService(intent)
     }
+
+    fun setOverlayHiddenForCapture(hidden: Boolean) {
+      instance?.let { service ->
+        service.mainHandler.post {
+          service.floatingComposeView?.alpha = if (hidden) 0f else 1f
+        }
+      }
+    }
   }
 
+  private val mainHandler = Handler(Looper.getMainLooper())
   private var windowManager: WindowManager? = null
   private var floatingComposeView: ComposeView? = null
   private var windowLayoutParams: WindowManager.LayoutParams? = null
@@ -60,6 +73,7 @@ class OverlayService : Service() {
 
   override fun onCreate() {
     super.onCreate()
+    instance = this
     overlayLifecycleOwner.performCreate()
     overlayLifecycleOwner.performStart()
     windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -255,6 +269,9 @@ class OverlayService : Service() {
 
   override fun onDestroy() {
     super.onDestroy()
+    if (instance == this) {
+      instance = null
+    }
     hideFloatingView()
     overlayLifecycleOwner.performStop()
     overlayLifecycleOwner.performDestroy()

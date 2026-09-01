@@ -47,6 +47,10 @@
         <activity
             android:name=".ui.CapturePromptActivity"
             android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="standard"
             android:theme="@style/Theme.TransparentCapturePrompt" />
 
         <service

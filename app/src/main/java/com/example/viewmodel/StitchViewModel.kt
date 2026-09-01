@@ -19,9 +19,11 @@ import com.example.model.StitchGlobalSettings
 import com.example.model.StitchResult
 import com.example.model.StitchUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.FileInputStream
@@ -46,6 +48,8 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
 
   private val _incomingSharedUris = MutableStateFlow<List<Uri>?>(null)
   val incomingSharedUris: StateFlow<List<Uri>?> = _incomingSharedUris.asStateFlow()
+
+  private var seamDetectionJob: Job? = null
 
   fun clearUserMessage() {
     _userMessage.value = null
@@ -160,16 +164,20 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
   fun autoDetectAllSeams() {
     val list = _images.value
     if (list.size < 2) {
+      seamDetectionJob?.cancel()
       _seams.value = emptyList()
+      _uiState.value = StitchUiState.Idle
       return
     }
 
-    viewModelScope.launch {
+    seamDetectionJob?.cancel()
+    seamDetectionJob = viewModelScope.launch {
       val context = getApplication<Application>()
       val newSeams = mutableListOf<SeamConfig>()
       val currentSettings = _settings.value
 
       for (i in 0 until list.size - 1) {
+        if (!isActive) return@launch
         _uiState.value = StitchUiState.Detecting(currentPair = i + 1, totalPairs = list.size - 1)
 
         val topItem = list[i]
@@ -191,8 +199,10 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
         }
       }
 
-      _seams.value = newSeams
-      _uiState.value = StitchUiState.Idle
+      if (isActive) {
+        _seams.value = newSeams
+        _uiState.value = StitchUiState.Idle
+      }
     }
   }
 

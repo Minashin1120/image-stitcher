@@ -345,7 +345,13 @@ class ScreenCaptureService : Service() {
     val reader = imageReader ?: return
     var image: Image? = null
     try {
+      // Hide floating overlay so it does not appear in the screenshot
+      OverlayService.setOverlayHiddenForCapture(true)
+      delay(60L) // Allow display compositor to render clean frame
+
       image = reader.acquireLatestImage()
+      OverlayService.setOverlayHiddenForCapture(false)
+
       if (image == null) return
 
       val planes = image.planes
@@ -408,6 +414,7 @@ class ScreenCaptureService : Service() {
     } catch (e: Exception) {
       e.printStackTrace()
     } finally {
+      OverlayService.setOverlayHiddenForCapture(false)
       image?.close()
     }
   }

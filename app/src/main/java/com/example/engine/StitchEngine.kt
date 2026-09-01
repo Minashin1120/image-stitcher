@@ -282,6 +282,10 @@ object StitchEngine {
           val r2 = gray2[y2]
 
           for (x in 0 until matchWidth step stepX) {
+            // Give lower weight to bottom-right floating buttons so they don't bias alignment
+            if (y1 > h1 * 0.72f && x > matchWidth * 0.65f) {
+              continue
+            }
             val v1 = r1[x]
             val v2 = r2[x]
             totalDiff += abs(v1 - v2)
@@ -336,16 +340,24 @@ object StitchEngine {
     }
 
     // Calculate exact seamless cut positions:
-    // In image 1, we want content up to y1Cut (strictly excluding the bottom bar).
-    // In image 2, content starts at y2Cut = y1Cut - fullShift (strictly excluding the top bar & duplicate overlap).
-    val y1TargetCut = origHeight1 - fullBottomInset1
-    var y2Cut = y1TargetCut - fullShift
-    var y1Cut = y1TargetCut
+    // To completely eliminate leftover floating action buttons (FAB) in the bottom-right,
+    // we cut Image 1 in the upper safe zone of the overlap (far above bottom floating buttons),
+    // and let Image 2 supply the clean, unobstructed scrolled content.
+    val overlapScaled = (h1 - bottomInset1 - bestShiftScaled - topInset2).coerceAtLeast(1)
+    val scaledMinY2 = topInset2 + 2
+    val scaledMaxY2 = (topInset2 + (overlapScaled * 0.35f).roundToInt()).coerceAtMost(h2 - bottomInset2 - 1)
 
-    if (y2Cut < fullTopInset2) {
-      y2Cut = fullTopInset2
-      y1Cut = y2Cut + fullShift
-    }
+    val bestScaledY2Seam = findOptimalSeamRow(
+      gray1 = gray1,
+      gray2 = gray2,
+      shift = bestShiftScaled,
+      minY2 = scaledMinY2,
+      maxY2 = scaledMaxY2,
+      width = matchWidth
+    )
+
+    var y2Cut = (bestScaledY2Seam * scaleRatioY2).roundToInt()
+    var y1Cut = y2Cut + fullShift
 
     y1Cut = y1Cut.coerceIn(fullTopInset1 + 1, origHeight1 - fullBottomInset1)
     y2Cut = (y1Cut - fullShift).coerceIn(fullTopInset2, origHeight2 - 1)
@@ -369,6 +381,64 @@ object StitchEngine {
       topTrim = topTrim,
       bottomTrim = bottomTrim
     )
+  }
+
+  /**
+   * Searches for the optimal seam cut row within the safe overlap window that
+   * minimizes horizontal pixel difference and avoids cutting across text glyphs or
+   * blurred / translucent header boundaries.
+   */
+  private fun findOptimalSeamRow(
+    gray1: Array<IntArray>,
+    gray2: Array<IntArray>,
+    shift: Int,
+    minY2: Int,
+    maxY2: Int,
+    width: Int
+  ): Int {
+    val h1 = gray1.size
+    val h2 = gray2.size
+    val startY = minY2.coerceIn(0, h2 - 1)
+    val endY = maxY2.coerceIn(startY, h2 - 1)
+    if (startY >= endY) return startY
+
+    var bestY = startY
+    var bestRowDiff = Double.MAX_VALUE
+    val sampleStep = 4
+
+    for (y2 in startY..endY) {
+      val y1 = y2 + shift
+      if (y1 !in 0 until h1) continue
+
+      val r1 = gray1[y1]
+      val r2 = gray2[y2]
+      var diffSum = 0
+      var edgeSum = 0
+      var samples = 0
+
+      for (x in 0 until width step sampleStep) {
+        val v1 = r1[x]
+        val v2 = r2[x]
+        diffSum += abs(v1 - v2)
+
+        val prevY = (y2 - 1).coerceAtLeast(0)
+        val nextY = (y2 + 1).coerceAtMost(h2 - 1)
+        edgeSum += abs(gray2[nextY][x] - gray2[prevY][x])
+        samples++
+      }
+
+      if (samples > 0) {
+        val avgDiff = diffSum.toDouble() / samples
+        val avgEdge = edgeSum.toDouble() / samples
+        val score = avgDiff * 1.5 + avgEdge * 0.5
+        if (score < bestRowDiff) {
+          bestRowDiff = score
+          bestY = y2
+        }
+      }
+    }
+
+    return bestY
   }
 
   /**
@@ -729,6 +799,52 @@ object StitchEngine {
           op.dstRect
         }
         canvas.drawBitmap(op.bitmap, op.srcRect, targetDst, paint)
+      }
+
+      // Micro-alpha blending across seams for 100% artifact-free seamless blending
+      // (Removes any hairline color/blur differences across seam boundaries)
+      val blendRadius = 3
+      val blendWidth = finalOutputBitmap.width
+      val blendPixels = IntArray(blendWidth)
+      val srcPixels1 = IntArray(blendWidth)
+      val srcPixels2 = IntArray(blendWidth)
+
+      for (i in 0 until drawOperations.size - 1) {
+        val op1 = drawOperations[i]
+        val op2 = drawOperations[i + 1]
+        val seamY = if (isScaled) (op1.dstRect.bottom * globalScale).roundToInt() else op1.dstRect.bottom
+
+        for (offset in -blendRadius until blendRadius) {
+          val currentY = seamY + offset
+          if (currentY <= 0 || currentY >= finalOutputBitmap.height - 1) continue
+
+          val t = (offset + blendRadius + 0.5f) / (2f * blendRadius)
+          val yInBmp1 = op1.srcRect.bottom + offset
+          val yInBmp2 = op2.srcRect.top + offset
+
+          if (yInBmp1 in 0 until op1.bitmap.height && yInBmp2 in 0 until op2.bitmap.height) {
+            val copyW = minOf(blendWidth, op1.bitmap.width, op2.bitmap.width)
+            op1.bitmap.getPixels(srcPixels1, 0, op1.bitmap.width, 0, yInBmp1, copyW, 1)
+            op2.bitmap.getPixels(srcPixels2, 0, op2.bitmap.width, 0, yInBmp2, copyW, 1)
+
+            for (x in 0 until copyW) {
+              val c1 = srcPixels1[x]
+              val c2 = srcPixels2[x]
+
+              val a1 = Color.alpha(c1); val r1 = Color.red(c1); val g1 = Color.green(c1); val b1 = Color.blue(c1)
+              val a2 = Color.alpha(c2); val r2 = Color.red(c2); val g2 = Color.green(c2); val b2 = Color.blue(c2)
+
+              val a = (a1 * (1f - t) + a2 * t).roundToInt().coerceIn(0, 255)
+              val r = (r1 * (1f - t) + r2 * t).roundToInt().coerceIn(0, 255)
+              val g = (g1 * (1f - t) + g2 * t).roundToInt().coerceIn(0, 255)
+              val b = (b1 * (1f - t) + b2 * t).roundToInt().coerceIn(0, 255)
+
+              blendPixels[x] = Color.argb(a, r, g, b)
+            }
+
+            finalOutputBitmap.setPixels(blendPixels, 0, blendWidth, 0, currentY, copyW, 1)
+          }
+        }
       }
 
       onProgress(0.9f, context.getString(R.string.progress_saving_screenshot))
