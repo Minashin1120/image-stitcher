@@ -76,6 +76,9 @@ class MainActivity : ComponentActivity() {
       }
     }
 
+    // Set up persistent quick launch notification
+    com.example.service.QuickLaunchNotificationManager.updatePersistentNotification(this, true)
+
     setContent {
       MyApplicationTheme {
         Surface(
@@ -131,6 +134,10 @@ class MainActivity : ComponentActivity() {
     super.onResume()
     val isAccEnabled = AutoScrollAccessibilityService.isAccessibilityServiceEnabled(this)
     ScreenCaptureStateHolder.updateState { it.copy(isAccessibilityEnabled = isAccEnabled) }
+    com.example.service.QuickLaunchNotificationManager.updatePersistentNotification(
+      this,
+      viewModel.settings.value.persistentNotification
+    )
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -207,5 +214,9 @@ class MainActivity : ComponentActivity() {
       putExtra(ScreenCaptureService.EXTRA_SCROLL_SPEED, pendingScrollSpeed)
     }
     ContextCompat.startForegroundService(this, serviceIntent)
+
+    if (viewModel.settings.value.floatingOverlayEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && android.provider.Settings.canDrawOverlays(this)) {
+      com.example.service.OverlayService.showOverlay(this, expandSettings = false)
+    }
   }
 }

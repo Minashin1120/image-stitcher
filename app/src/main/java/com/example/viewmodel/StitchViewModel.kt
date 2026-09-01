@@ -126,6 +126,10 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
 
   fun updateSettings(newSettings: StitchGlobalSettings) {
     _settings.value = newSettings
+    com.example.service.QuickLaunchNotificationManager.updatePersistentNotification(
+      getApplication(),
+      newSettings.persistentNotification
+    )
     if (newSettings.autoDetectOverlap) {
       autoDetectAllSeams()
     }

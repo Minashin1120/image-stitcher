@@ -40,6 +40,8 @@ data class StitchGlobalSettings(
   val removeNavBar: Boolean = true,
   val navBarHeightPx: Int = 160,
   val edgeBlending: Boolean = true,
+  val persistentNotification: Boolean = true,
+  val floatingOverlayEnabled: Boolean = true,
   val outputFormat: OutputFormat = OutputFormat.PNG,
   val outputQuality: Int = 95,
   val preserveOriginalResolution: Boolean = false

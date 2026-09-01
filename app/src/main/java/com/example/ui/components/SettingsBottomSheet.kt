@@ -25,11 +25,13 @@ import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -317,6 +319,145 @@ fun SettingsBottomSheet(
             onCheckedChange = { onUpdateSettings(settings.copy(preserveOriginalResolution = it)) },
             modifier = Modifier.testTag("switch_preserve_resolution")
           )
+        }
+      }
+
+      // Persistent Notification Quick Launch Card
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(16.dp)
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                Icons.Default.Notifications,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = stringResource(R.string.settings_persistent_notification_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+              text = stringResource(R.string.settings_persistent_notification_desc),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          Switch(
+            checked = settings.persistentNotification,
+            onCheckedChange = { onUpdateSettings(settings.copy(persistentNotification = it)) },
+            modifier = Modifier.testTag("switch_persistent_notification")
+          )
+        }
+      }
+
+      // Floating Overlay Controls Card
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(16.dp)
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  Icons.Default.Layers,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                  text = stringResource(R.string.settings_overlay_title),
+                  style = MaterialTheme.typography.titleMedium,
+                  fontWeight = FontWeight.SemiBold
+                )
+              }
+              Spacer(modifier = Modifier.height(4.dp))
+              Text(
+                text = stringResource(R.string.settings_overlay_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+
+            Switch(
+              checked = settings.floatingOverlayEnabled,
+              onCheckedChange = { onUpdateSettings(settings.copy(floatingOverlayEnabled = it)) },
+              modifier = Modifier.testTag("switch_floating_overlay")
+            )
+          }
+
+          if (settings.floatingOverlayEnabled) {
+            val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+              Settings.canDrawOverlays(context)
+            } else true
+
+            Spacer(modifier = Modifier.height(10.dp))
+            if (!hasOverlayPermission) {
+              FilledTonalButton(
+                onClick = {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val intent = Intent(
+                      Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                      Uri.parse("package:${context.packageName}")
+                    ).apply {
+                      flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                  }
+                },
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.btn_grant_overlay_permission))
+              }
+            } else {
+              OutlinedButton(
+                onClick = {
+                  com.example.service.OverlayService.showOverlay(context, expandSettings = true)
+                },
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.btn_open_floating_controls))
+              }
+            }
+          }
         }
       }
 

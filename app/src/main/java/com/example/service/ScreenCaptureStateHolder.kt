@@ -18,6 +18,9 @@ data class CaptureSessionState(
   val autoScrollEnabled: Boolean = false,
   val scrollSpeedRatio: Float = 0.55f,
   val isAccessibilityEnabled: Boolean = false,
+  val isOverlayVisible: Boolean = false,
+  val isOverlayExpanded: Boolean = false,
+  val persistentNotificationEnabled: Boolean = true,
   val lastCapturedThumbnail: Bitmap? = null
 )
 

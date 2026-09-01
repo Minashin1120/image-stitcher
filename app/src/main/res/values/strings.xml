@@ -178,4 +178,24 @@
     <string name="shared_tap_image_to_edit_hint">Tap an image to edit it, or tap Stitch to combine all</string>
     <string name="msg_shared_images_added">Added %1$d shared image(s) to stitch list!</string>
     <string name="cd_shared_image_thumb">Shared image preview %1$d</string>
+    <string name="persistent_notification_title">Continuous Screen Capture</string>
+    <string name="persistent_notification_desc">Tap to open floating capture overlay &amp; controls</string>
+    <string name="persistent_notification_action_overlay">⚙️ Controls &amp; Settings</string>
+    <string name="persistent_notification_action_start">📸 Quick Start</string>
+    <string name="persistent_notification_action_open_app">📱 Open App</string>
+    <string name="quick_launch_channel_name">Screen Stitcher Quick Launch</string>
+    <string name="quick_launch_channel_desc">Persistent notification to launch continuous screen capture and floating overlay controls from anywhere</string>
+    <string name="btn_launch_overlay">Show Floating Controls Over Other Apps</string>
+    <string name="overlay_permission_needed_title">Overlay Permission Required</string>
+    <string name="overlay_permission_needed_desc">To show floating capture settings and control buttons while browsing other apps, please grant &quot;Display over other apps&quot; permission.</string>
+    <string name="btn_grant_overlay_permission">Grant Overlay Permission</string>
+    <string name="overlay_mode_badge">Floating Overlay</string>
+    <string name="overlay_drag_hint">Drag handle</string>
+    <string name="overlay_minimize">Minimize</string>
+    <string name="overlay_expand">Expand</string>
+    <string name="settings_persistent_notification_title">Persistent Quick Launch Notification</string>
+    <string name="settings_persistent_notification_desc">Keep a launcher in the notification shade to quickly configure and start capture from any app</string>
+    <string name="settings_overlay_title">Floating Overlay Controls</string>
+    <string name="settings_overlay_desc">Show draggable floating settings &amp; controls over other apps for hands-free long screenshot stitching</string>
+    <string name="btn_open_floating_controls">Open Floating Controls</string>
 </resources>

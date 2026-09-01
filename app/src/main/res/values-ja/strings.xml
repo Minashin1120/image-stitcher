@@ -178,4 +178,24 @@
     <string name="shared_tap_image_to_edit_hint">画像をタップして編集するか、ボタンで結合できます</string>
     <string name="msg_shared_images_added">共有された画像（%1$d枚）を結合リストに追加しました！</string>
     <string name="cd_shared_image_thumb">共有画像のプレビュー %1$d</string>
+    <string name="persistent_notification_title">連続画面キャプチャ（クイック起動）</string>
+    <string name="persistent_notification_desc">タップしてオーバーレイ操作パネルを表示します</string>
+    <string name="persistent_notification_action_overlay">⚙️ 操作・設定</string>
+    <string name="persistent_notification_action_start">📸 すぐに開始</string>
+    <string name="persistent_notification_action_open_app">📱 アプリを開く</string>
+    <string name="quick_launch_channel_name">常駐クイック起動通知</string>
+    <string name="quick_launch_channel_desc">通知欄からいつでも画面キャプチャやオーバーレイ操作を開始できます</string>
+    <string name="btn_launch_overlay">他のアプリの上に操作パネルを表示</string>
+    <string name="overlay_permission_needed_title">「他のアプリの上に表示」の許可が必要です</string>
+    <string name="overlay_permission_needed_desc">他のアプリを開いたまま画面キャプチャの設定や開始・停止を行うには、「他のアプリの上に重ねて表示」を許可してください。</string>
+    <string name="btn_grant_overlay_permission">「他のアプリの上に表示」を許可</string>
+    <string name="overlay_mode_badge">フローティング操作</string>
+    <string name="overlay_drag_hint">ドラッグして移動</string>
+    <string name="overlay_minimize">最小化</string>
+    <string name="overlay_expand">展開</string>
+    <string name="settings_persistent_notification_title">常駐通知（通知欄からクイック起動）</string>
+    <string name="settings_persistent_notification_desc">通知欄に常駐通知を表示し、どのアプリからでも素早くキャプチャを開始・設定できるようにします</string>
+    <string name="settings_overlay_title">フローティング操作パネル</string>
+    <string name="settings_overlay_desc">他のアプリを開きながらキャプチャの開始・一時停止・結合を行える操作パネルを表示します</string>
+    <string name="btn_open_floating_controls">フローティング操作を開く</string>
 </resources>

@@ -2,6 +2,8 @@ package com.example.ui.components
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterNone
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -660,6 +663,81 @@ private fun CaptureConfigurationView(
           checked = autoDeduplicate,
           onCheckedChange = onToggleDeduplicate
         )
+      }
+    }
+
+    // Floating Overlay Controls Card
+    val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      Settings.canDrawOverlays(context)
+    } else true
+
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      colors = CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+      ),
+      shape = RoundedCornerShape(16.dp)
+    ) {
+      Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Icon(
+            Icons.Default.Layers,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = stringResource(R.string.settings_overlay_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+          )
+        }
+
+        Text(
+          text = stringResource(R.string.settings_overlay_desc),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (!hasOverlayPermission) {
+          FilledTonalButton(
+            onClick = {
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(
+                  Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                  Uri.parse("package:${context.packageName}")
+                ).apply {
+                  flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+              }
+            },
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.btn_grant_overlay_permission))
+          }
+        } else {
+          OutlinedButton(
+            onClick = {
+              com.example.service.OverlayService.showOverlay(context, expandSettings = true)
+            },
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.btn_launch_overlay))
+          }
+        }
       }
     }
 
