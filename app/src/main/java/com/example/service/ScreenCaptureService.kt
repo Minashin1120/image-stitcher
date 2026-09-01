@@ -90,6 +90,19 @@ class ScreenCaptureService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_START -> {
+        cleanup()
+        capturedFiles.clear()
+        lastSampleBitmap?.recycle()
+        lastSampleBitmap = null
+
+        // Clean up old temporary captures from disk
+        val captureDir = File(cacheDir, "screen_captures")
+        if (captureDir.exists()) {
+          captureDir.listFiles()?.forEach { oldFile ->
+            try { oldFile.delete() } catch (_: Exception) {}
+          }
+        }
+
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         val resultData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
           intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
@@ -261,6 +274,10 @@ class ScreenCaptureService : Service() {
   }
 
   private fun initMediaProjection(resultCode: Int, resultData: Intent) {
+    capturedFiles.clear()
+    lastSampleBitmap?.recycle()
+    lastSampleBitmap = null
+
     val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
     val metrics = DisplayMetrics()
     @Suppress("DEPRECATION")
@@ -319,7 +336,7 @@ class ScreenCaptureService : Service() {
     captureLoopJob?.cancel()
     captureLoopJob = serviceScope.launch {
       // Allow user initial time to switch to destination app
-      delay(700)
+      delay(600)
       
       // First frame capture
       if (isActive && !isPaused) {
@@ -341,8 +358,8 @@ class ScreenCaptureService : Service() {
     }
   }
 
-  private suspend fun captureCurrentFrame() {
-    val reader = imageReader ?: return
+  private suspend fun captureCurrentFrame(): Boolean {
+    val reader = imageReader ?: return false
     var image: Image? = null
     try {
       // Hide floating overlay so it does not appear in the screenshot
@@ -350,9 +367,17 @@ class ScreenCaptureService : Service() {
       delay(60L) // Allow display compositor to render clean frame
 
       image = reader.acquireLatestImage()
+      if (image == null) {
+        // Retry a few times if buffer is in flight
+        for (retry in 0 until 5) {
+          delay(60L)
+          image = reader.acquireLatestImage()
+          if (image != null) break
+        }
+      }
       OverlayService.setOverlayHiddenForCapture(false)
 
-      if (image == null) return
+      if (image == null) return false
 
       val planes = image.planes
       val buffer = planes[0].buffer
@@ -378,7 +403,7 @@ class ScreenCaptureService : Service() {
       // Check deduplication if enabled and we already have at least 1 image
       if (autoDeduplicate && capturedFiles.isNotEmpty() && isDuplicate(croppedBitmap)) {
         croppedBitmap.recycle()
-        return
+        return false
       }
 
       // Save sample for next duplicate check
@@ -410,9 +435,10 @@ class ScreenCaptureService : Service() {
         }
         updateNotification()
       }
-
+      return true
     } catch (e: Exception) {
       e.printStackTrace()
+      return false
     } finally {
       OverlayService.setOverlayHiddenForCapture(false)
       image?.close()
@@ -446,17 +472,28 @@ class ScreenCaptureService : Service() {
   }
 
   private fun finishAndStitch() {
-    val uris = capturedFiles.map { Uri.fromFile(it) }
-    ScreenCaptureStateHolder.notifyCaptureCompleted(uris)
-    ScreenCaptureStateHolder.reset()
+    serviceScope.launch {
+      captureLoopJob?.cancel()
 
-    // Bring MainActivity to front
-    val mainIntent = Intent(this, MainActivity::class.java).apply {
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+      // If no frames captured yet, capture the current screen frame immediately
+      if (capturedFiles.isEmpty()) {
+        captureCurrentFrame()
+      }
+
+      val uris = capturedFiles.map { Uri.fromFile(it) }
+      ScreenCaptureStateHolder.notifyCaptureCompleted(uris)
+      ScreenCaptureStateHolder.reset()
+
+      // Bring MainActivity to front with captured URIs
+      val mainIntent = Intent(this@ScreenCaptureService, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        putParcelableArrayListExtra("extra_captured_uris", ArrayList(uris))
+      }
+      startActivity(mainIntent)
+
+      capturedFiles.clear()
+      stopSelf()
     }
-    startActivity(mainIntent)
-
-    stopSelf()
   }
 
   private fun cancelAndCleanup() {

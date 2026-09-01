@@ -86,6 +86,27 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
     _incomingSharedUris.value = null
   }
 
+  fun setImages(newUris: List<Uri>) {
+    if (newUris.isEmpty()) {
+      clearImages()
+      return
+    }
+    viewModelScope.launch {
+      val context = getApplication<Application>()
+      val newList = mutableListOf<ImageItem>()
+
+      for (uri in newUris) {
+        val meta = StitchEngine.getImageMetadata(context, uri)
+        val thumb = StitchEngine.loadThumbnail(context, uri, 360)
+        newList.add(meta.copy(thumbnail = thumb))
+      }
+
+      _images.value = newList
+      _uiState.value = StitchUiState.Idle
+      autoDetectAllSeams()
+    }
+  }
+
   fun addImages(newUris: List<Uri>) {
     if (newUris.isEmpty()) return
     viewModelScope.launch {

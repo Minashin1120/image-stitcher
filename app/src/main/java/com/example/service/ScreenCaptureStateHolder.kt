@@ -28,18 +28,29 @@ object ScreenCaptureStateHolder {
   private val _sessionState = MutableStateFlow(CaptureSessionState())
   val sessionState: StateFlow<CaptureSessionState> = _sessionState.asStateFlow()
 
-  private val _captureCompletedEvent = MutableSharedFlow<List<Uri>>(extraBufferCapacity = 1)
+  private val _captureCompletedEvent = MutableSharedFlow<List<Uri>>(replay = 1, extraBufferCapacity = 2)
   val captureCompletedEvent: SharedFlow<List<Uri>> = _captureCompletedEvent.asSharedFlow()
+
+  @Volatile
+  private var pendingCompletedUris: List<Uri>? = null
 
   fun updateState(transform: (CaptureSessionState) -> CaptureSessionState) {
     _sessionState.value = transform(_sessionState.value)
   }
 
   fun notifyCaptureCompleted(uris: List<Uri>) {
+    pendingCompletedUris = uris
     _captureCompletedEvent.tryEmit(uris)
+  }
+
+  fun consumePendingCompletedUris(): List<Uri>? {
+    val uris = pendingCompletedUris
+    pendingCompletedUris = null
+    return uris
   }
 
   fun reset() {
     _sessionState.value = CaptureSessionState()
   }
 }
+

@@ -62,11 +62,24 @@ class MainActivity : ComponentActivity() {
     // Handle initial intent if shared from another app
     handleIncomingIntent(intent)
 
+    // Check if launched with captured uris directly
+    val initialCapturedUris = getCapturedUrisFromIntent(intent)
+      ?: ScreenCaptureStateHolder.consumePendingCompletedUris()
+    if (!initialCapturedUris.isNullOrEmpty()) {
+      viewModel.setImages(initialCapturedUris)
+      Toast.makeText(
+        this,
+        getString(R.string.msg_capture_completed, initialCapturedUris.size),
+        Toast.LENGTH_LONG
+      ).show()
+    }
+
     // Listen for completed capture sessions to automatically load into StitchViewModel
     lifecycleScope.launch {
       ScreenCaptureStateHolder.captureCompletedEvent.collectLatest { uris ->
         if (uris.isNotEmpty()) {
-          viewModel.addImages(uris)
+          ScreenCaptureStateHolder.consumePendingCompletedUris()
+          viewModel.setImages(uris)
           Toast.makeText(
             this@MainActivity,
             getString(R.string.msg_capture_completed, uris.size),
@@ -143,7 +156,27 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    val capturedUris = getCapturedUrisFromIntent(intent)
+      ?: ScreenCaptureStateHolder.consumePendingCompletedUris()
+    if (!capturedUris.isNullOrEmpty()) {
+      viewModel.setImages(capturedUris)
+      Toast.makeText(
+        this,
+        getString(R.string.msg_capture_completed, capturedUris.size),
+        Toast.LENGTH_LONG
+      ).show()
+    }
     handleIncomingIntent(intent)
+  }
+
+  private fun getCapturedUrisFromIntent(intent: Intent?): List<android.net.Uri>? {
+    if (intent == null) return null
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableArrayListExtra("extra_captured_uris", android.net.Uri::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      intent.getParcelableArrayListExtra<android.net.Uri>("extra_captured_uris")
+    }
   }
 
   private fun handleIncomingIntent(intent: Intent?) {
