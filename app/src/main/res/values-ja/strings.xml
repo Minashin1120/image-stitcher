@@ -167,4 +167,15 @@
     <string name="btn_open_accessibility_settings">ユーザー補助設定を開く</string>
     <string name="capture_scroll_distance_title">1回のスクロール量</string>
     <string name="capture_scroll_distance_desc">1枚撮影ごとに画面をスクロールする幅を調整します。</string>
+    <string name="shared_images_title_single">共有された画像を受信しました</string>
+    <string name="shared_images_title_multiple">共有された画像（%1$d枚）を受信しました</string>
+    <string name="shared_images_subtitle">受信した画像をどのように処理しますか？</string>
+    <string name="btn_shared_action_stitch_all">すべて結合リストに追加 (%1$d枚)</string>
+    <string name="btn_shared_action_stitch_single">結合リストに追加</string>
+    <string name="btn_shared_action_edit">画像を編集する</string>
+    <string name="btn_shared_action_edit_index">画像 #%1$d を編集する</string>
+    <string name="shared_preview_label">受信した画像プレビュー</string>
+    <string name="shared_tap_image_to_edit_hint">画像をタップして編集するか、ボタンで結合できます</string>
+    <string name="msg_shared_images_added">共有された画像（%1$d枚）を結合リストに追加しました！</string>
+    <string name="cd_shared_image_thumb">共有画像のプレビュー %1$d</string>
 </resources>

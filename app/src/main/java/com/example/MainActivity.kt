@@ -59,6 +59,9 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
+    // Handle initial intent if shared from another app
+    handleIncomingIntent(intent)
+
     // Listen for completed capture sessions to automatically load into StitchViewModel
     lifecycleScope.launch {
       ScreenCaptureStateHolder.captureCompletedEvent.collectLatest { uris ->
@@ -128,6 +131,53 @@ class MainActivity : ComponentActivity() {
     super.onResume()
     val isAccEnabled = AutoScrollAccessibilityService.isAccessibilityServiceEnabled(this)
     ScreenCaptureStateHolder.updateState { it.copy(isAccessibilityEnabled = isAccEnabled) }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleIncomingIntent(intent)
+  }
+
+  private fun handleIncomingIntent(intent: Intent?) {
+    if (intent == null) return
+    val action = intent.action ?: return
+
+    val uris = mutableListOf<android.net.Uri>()
+
+    if (Intent.ACTION_SEND == action) {
+      val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+      } else {
+        @Suppress("DEPRECATION")
+        intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+      }
+      if (streamUri != null) {
+        uris.add(streamUri)
+      } else if (intent.clipData != null && intent.clipData!!.itemCount > 0) {
+        intent.clipData!!.getItemAt(0)?.uri?.let { uris.add(it) }
+      } else if (intent.data != null) {
+        uris.add(intent.data!!)
+      }
+    } else if (Intent.ACTION_SEND_MULTIPLE == action) {
+      val streamUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+      } else {
+        @Suppress("DEPRECATION")
+        intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+      }
+      if (!streamUris.isNullOrEmpty()) {
+        uris.addAll(streamUris.filterNotNull())
+      } else if (intent.clipData != null) {
+        for (i in 0 until intent.clipData!!.itemCount) {
+          intent.clipData!!.getItemAt(i)?.uri?.let { uris.add(it) }
+        }
+      }
+    }
+
+    if (uris.isNotEmpty()) {
+      viewModel.handleIncomingSharedUris(uris)
+    }
   }
 
   private fun checkNotificationAndRequestCapture() {

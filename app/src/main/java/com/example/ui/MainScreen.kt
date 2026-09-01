@@ -88,6 +88,7 @@ import com.example.ui.components.ScreenCaptureSheet
 import com.example.ui.components.SeamBadge
 import com.example.ui.components.SeamFineTuneDialog
 import com.example.ui.components.SettingsBottomSheet
+import com.example.ui.components.SharedImageActionDialog
 import com.example.viewmodel.StitchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,6 +109,7 @@ fun MainScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
   val captureSessionState by ScreenCaptureStateHolder.sessionState.collectAsStateWithLifecycle()
+  val incomingSharedUris by viewModel.incomingSharedUris.collectAsStateWithLifecycle()
 
   val snackbarHostState = remember { SnackbarHostState() }
   var showSettingsSheet by remember { mutableStateOf(false) }
@@ -115,6 +117,8 @@ fun MainScreen(
 
   var showCaptureSheet by remember { mutableStateOf(false) }
   val captureSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+  val sharedActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   var activeFineTunePairIndex by remember { mutableStateOf<Int?>(null) }
   var activeEditingImageIndex by remember { mutableStateOf<Int?>(null) }
@@ -683,6 +687,32 @@ fun MainScreen(
       },
       onDismiss = { showCaptureSheet = false }
     )
+  }
+
+  // Incoming Shared Image Action Bottom Sheet
+  incomingSharedUris?.let { sharedList ->
+    if (sharedList.isNotEmpty()) {
+      SharedImageActionDialog(
+        sheetState = sharedActionSheetState,
+        sharedUris = sharedList,
+        onAddToStitch = { uris ->
+          viewModel.addImages(uris)
+          viewModel.clearIncomingSharedUris()
+          Toast.makeText(
+            context,
+            context.getString(R.string.msg_shared_images_added, uris.size),
+            Toast.LENGTH_SHORT
+          ).show()
+        },
+        onEditSingle = { targetUri ->
+          standaloneEditingUri = targetUri
+          viewModel.clearIncomingSharedUris()
+        },
+        onDismiss = {
+          viewModel.clearIncomingSharedUris()
+        }
+      )
+    }
   }
 }
 

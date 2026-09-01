@@ -141,5 +141,18 @@ class ExampleRobolectricTest {
     assertEquals(false, com.example.service.ScreenCaptureStateHolder.sessionState.value.isRunning)
     assertEquals(false, com.example.service.ScreenCaptureStateHolder.sessionState.value.autoScrollEnabled)
   }
+
+  @Test
+  fun `StitchViewModel handles incoming shared URIs properly`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StitchViewModel(application)
+
+    val dummyUri = android.net.Uri.parse("file:///dummy/path/screenshot.png")
+    viewModel.handleIncomingSharedUris(listOf(dummyUri))
+
+    // Verify clear method works
+    viewModel.clearIncomingSharedUris()
+    assertEquals(null, viewModel.incomingSharedUris.value)
+  }
 }
 

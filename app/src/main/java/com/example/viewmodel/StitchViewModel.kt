@@ -44,8 +44,42 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
   private val _userMessage = MutableStateFlow<String?>(null)
   val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
+  private val _incomingSharedUris = MutableStateFlow<List<Uri>?>(null)
+  val incomingSharedUris: StateFlow<List<Uri>?> = _incomingSharedUris.asStateFlow()
+
   fun clearUserMessage() {
     _userMessage.value = null
+  }
+
+  fun handleIncomingSharedUris(uris: List<Uri>) {
+    if (uris.isEmpty()) return
+    viewModelScope.launch(Dispatchers.IO) {
+      val context = getApplication<Application>()
+      val cachedUris = mutableListOf<Uri>()
+      for ((index, uri) in uris.withIndex()) {
+        try {
+          val tempFile = java.io.File(context.cacheDir, "shared_import_${System.currentTimeMillis()}_$index.png")
+          context.contentResolver.openInputStream(uri)?.use { input ->
+            tempFile.outputStream().use { output ->
+              input.copyTo(output)
+            }
+          }
+          if (tempFile.exists() && tempFile.length() > 0) {
+            cachedUris.add(Uri.fromFile(tempFile))
+          } else {
+            cachedUris.add(uri)
+          }
+        } catch (e: Exception) {
+          e.printStackTrace()
+          cachedUris.add(uri)
+        }
+      }
+      _incomingSharedUris.value = cachedUris
+    }
+  }
+
+  fun clearIncomingSharedUris() {
+    _incomingSharedUris.value = null
   }
 
   fun addImages(newUris: List<Uri>) {

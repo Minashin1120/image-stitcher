@@ -167,4 +167,15 @@
     <string name="btn_open_accessibility_settings">Open Accessibility Settings</string>
     <string name="capture_scroll_distance_title">Scroll Distance per step</string>
     <string name="capture_scroll_distance_desc">Adjust how far the screen moves downward between screenshots.</string>
+    <string name="shared_images_title_single">Shared Image Received</string>
+    <string name="shared_images_title_multiple">%1$d Shared Images Received</string>
+    <string name="shared_images_subtitle">Choose what you would like to do with the shared image(s):</string>
+    <string name="btn_shared_action_stitch_all">Stitch All (%1$d Images)</string>
+    <string name="btn_shared_action_stitch_single">Add to Stitch Queue</string>
+    <string name="btn_shared_action_edit">Edit Image</string>
+    <string name="btn_shared_action_edit_index">Edit Image #%1$d</string>
+    <string name="shared_preview_label">Shared Preview</string>
+    <string name="shared_tap_image_to_edit_hint">Tap an image to edit it, or tap Stitch to combine all</string>
+    <string name="msg_shared_images_added">Added %1$d shared image(s) to stitch list!</string>
+    <string name="cd_shared_image_thumb">Shared image preview %1$d</string>
 </resources>
