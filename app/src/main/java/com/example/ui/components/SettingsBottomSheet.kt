@@ -198,7 +198,7 @@ fun SettingsBottomSheet(
             Slider(
               value = settings.statusBarHeightPx.toFloat(),
               onValueChange = { onUpdateSettings(settings.copy(statusBarHeightPx = it.roundToInt())) },
-              valueRange = 40f..240f,
+              valueRange = 30f..300f,
               modifier = Modifier.testTag("slider_status_bar_height")
             )
           }
@@ -265,7 +265,7 @@ fun SettingsBottomSheet(
             Slider(
               value = settings.navBarHeightPx.toFloat(),
               onValueChange = { onUpdateSettings(settings.copy(navBarHeightPx = it.roundToInt())) },
-              valueRange = 30f..200f,
+              valueRange = 30f..400f,
               modifier = Modifier.testTag("slider_nav_bar_height")
             )
           }

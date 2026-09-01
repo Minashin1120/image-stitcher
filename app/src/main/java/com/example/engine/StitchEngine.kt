@@ -219,7 +219,7 @@ object StitchEngine {
     val staticTopRows = detectStaticTopRows(gray1, gray2, matchWidth, maxHeaderCheckRows)
 
     // 2. Detect static bottom navigation bar (e.g. YouTube bottom 5-tab bar, Chrome bottom bar)
-    val maxFooterCheckRows = min(h1, h2) * 30 / 100
+    val maxFooterCheckRows = min(h1, h2) * 32 / 100
     val staticBottomRows = detectStaticBottomRows(gray1, gray2, matchWidth, maxFooterCheckRows)
 
     // 3. Detect transparent navigation bar with gesture pill / handle
@@ -336,8 +336,8 @@ object StitchEngine {
     }
 
     // Calculate exact seamless cut positions:
-    // In image 1, we want content up to y1Cut (excluding the bottom bar).
-    // In image 2, content starts at y2Cut = y1Cut - fullShift (excluding the top bar & overlap).
+    // In image 1, we want content up to y1Cut (strictly excluding the bottom bar).
+    // In image 2, content starts at y2Cut = y1Cut - fullShift (strictly excluding the top bar & duplicate overlap).
     val y1TargetCut = origHeight1 - fullBottomInset1
     var y2Cut = y1TargetCut - fullShift
     var y1Cut = y1TargetCut
@@ -374,6 +374,7 @@ object StitchEngine {
   /**
    * Detects contiguous static header rows (e.g. status bar + app bar)
    * that remain identical at the top of both screenshots.
+   * Tolerates slight status bar clock / battery icon differences.
    */
   private fun detectStaticTopRows(
     gray1: Array<IntArray>,
@@ -381,28 +382,53 @@ object StitchEngine {
     width: Int,
     maxRows: Int
   ): Int {
-    var staticCount = 0
-    for (y in 0 until maxRows) {
+    val h1 = gray1.size
+    val h2 = gray2.size
+    val maxCheck = minOf(maxRows, h1 * 35 / 100, h2 * 35 / 100)
+    if (maxCheck <= 0) return 0
+
+    val rowDiffs = DoubleArray(maxCheck)
+    val count = width / 2
+
+    for (y in 0 until maxCheck) {
       val r1 = gray1[y]
       val r2 = gray2[y]
       var diffSum = 0
-      val count = width / 2
       for (x in 0 until width step 2) {
         diffSum += abs(r1[x] - r2[x])
       }
-      val avgDiff = diffSum.toDouble() / count
-      if (avgDiff < 7.5) {
-        staticCount = y + 1
-      } else if (y > 8 && staticCount < y - 2) {
-        break
+      rowDiffs[y] = diffSum.toDouble() / count
+    }
+
+    var staticBoundary = 0
+    var consecutiveStatic = 0
+
+    for (y in 0 until maxCheck) {
+      val diff = rowDiffs[y]
+      if (diff < 9.0) {
+        consecutiveStatic++
+        staticBoundary = y + 1
+      } else {
+        if (consecutiveStatic >= 8 && diff > 14.0) {
+          break
+        }
+        if (y > 8 && y - staticBoundary >= 4) {
+          break
+        }
       }
     }
-    return staticCount
+
+    if (staticBoundary >= 4) {
+      return staticBoundary
+    }
+    return 0
   }
 
   /**
-   * Detects contiguous static bottom navigation bar rows (e.g. YouTube bottom tab bar,
-   * 3-button navigation bar, browser bottom toolbar) identical at the bottom of both screenshots.
+   * Highly robust detection of static bottom navigation bars (e.g. YouTube bottom 5-tab bar,
+   * Chrome bottom toolbar, 3-button system nav bar, social media tab bars).
+   *
+   * Noise-tolerant against transparent gesture navigation handles and compression artifacts.
    */
   private fun detectStaticBottomRows(
     gray1: Array<IntArray>,
@@ -412,10 +438,13 @@ object StitchEngine {
   ): Int {
     val h1 = gray1.size
     val h2 = gray2.size
-    var staticCount = 0
+    val maxCheck = minOf(maxRows, h1 * 32 / 100, h2 * 32 / 100)
+    if (maxCheck <= 0) return 0
+
+    val rowDiffs = DoubleArray(maxCheck)
     val count = width / 2
 
-    for (i in 0 until maxRows) {
+    for (i in 0 until maxCheck) {
       val y1 = h1 - 1 - i
       val y2 = h2 - 1 - i
       if (y1 < 0 || y2 < 0) break
@@ -426,14 +455,62 @@ object StitchEngine {
       for (x in 0 until width step 2) {
         diffSum += abs(r1[x] - r2[x])
       }
-      val avgDiff = diffSum.toDouble() / count
-      if (avgDiff < 7.5) {
-        staticCount = i + 1
-      } else if (i > 4 && staticCount < i - 2) {
-        break
+      rowDiffs[i] = diffSum.toDouble() / count
+    }
+
+    // Step 1: Search for contiguous static blocks (tab bar icons + background)
+    var staticBoundary = 0
+    var consecutiveStatic = 0
+
+    for (i in 0 until maxCheck) {
+      val diff = rowDiffs[i]
+      if (diff < 9.5) {
+        consecutiveStatic++
+        staticBoundary = i + 1
+      } else {
+        // If we already detected a substantial bottom bar (>= 8 rows / ~25dp)
+        // and hit moving scroll content (diff >= 14.0), stop search.
+        if (consecutiveStatic >= 8 && diff > 14.0) {
+          break
+        }
+        // If moving content continues for 4+ rows after the bottom area, stop.
+        if (i > 8 && (i - staticBoundary) >= 4) {
+          break
+        }
       }
     }
-    return staticCount
+
+    // Step 2: Also detect horizontal hairline divider line at the top of the nav bar
+    // In YouTube and Android Material Design, there is often a sharp contrast divider at the top of the nav bar.
+    if (staticBoundary in 6 until maxCheck - 2) {
+      // Check 4 rows above and below staticBoundary for a sharp difference jump into scroll content
+      for (testIdx in (staticBoundary - 2).coerceAtLeast(4)..(staticBoundary + 4).coerceAtMost(maxCheck - 1)) {
+        if (testIdx > 0 && rowDiffs[testIdx] > 16.0 && rowDiffs[testIdx - 1] < 9.0) {
+          staticBoundary = testIdx
+          break
+        }
+      }
+    }
+
+    if (staticBoundary >= 6) {
+      return staticBoundary
+    }
+
+    // Step 3: Check standard YouTube / Tab bar height range if static region was slightly noisy at bottom
+    // YouTube bottom bar is typically 48-60dp (~48-60px in 360-width space)
+    val typicalNavMin = (h1 * 0.055f).roundToInt()
+    val typicalNavMax = (h1 * 0.125f).roundToInt().coerceAtMost(maxCheck - 1)
+    for (cand in typicalNavMax downTo typicalNavMin) {
+      var lowDiffCount = 0
+      for (r in 0 until cand) {
+        if (rowDiffs[r] < 10.0) lowDiffCount++
+      }
+      if (lowDiffCount >= (cand * 0.75f).toInt() && rowDiffs[cand] > 15.0) {
+        return cand
+      }
+    }
+
+    return 0
   }
 
   /**
@@ -571,10 +648,13 @@ object StitchEngine {
         val seamAfter = if (i < bitmaps.size - 1) seams.getOrNull(i) ?: SeamConfig() else null
 
         // Crop top:
-        // For image 0: remove status bar if enabled.
+        // For image 0: remove status bar if enabled or if auto-detected.
         // For image i > 0: crop seamBefore.topTrim + seamBefore.totalOverlap!
+        val detectedTopTrim = seams.map { it.topTrim }.filter { it > 0 }.maxOrNull() ?: 0
         val cropTop: Int = if (i == 0) {
-          if (settings.removeStatusBar) settings.statusBarHeightPx.coerceAtMost(bmp.height / 4) else 0
+          if (settings.removeStatusBar) {
+            maxOf(settings.statusBarHeightPx, detectedTopTrim).coerceAtMost(bmp.height / 4)
+          } else 0
         } else {
           val overlap = seamBefore?.totalOverlap ?: 0
           val topTrim = seamBefore?.topTrim ?: 0
@@ -582,13 +662,21 @@ object StitchEngine {
         }
 
         // Crop bottom:
-        // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (excludes bottom nav bar).
-        // For the last image (i == bitmaps.size - 1): crop nav bar if enabled.
+        // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (strictly excludes bottom nav bar).
+        // For the last image (i == bitmaps.size - 1): automatically crop detected bottom nav bar so final image is clean.
+        val detectedBottomNav = seams.map { it.bottomTrim }.filter { it > 0 }.maxOrNull() ?: 0
         val cropBottom: Int = if (i == bitmaps.size - 1) {
-          if (settings.removeNavBar) settings.navBarHeightPx.coerceAtMost(bmp.height / 4) else 0
+          if (settings.removeNavBar) {
+            maxOf(settings.navBarHeightPx, detectedBottomNav).coerceAtMost(bmp.height / 4)
+          } else if (detectedBottomNav > 0 && settings.autoDetectOverlap) {
+            detectedBottomNav.coerceAtMost(bmp.height / 4)
+          } else {
+            0
+          }
         } else {
           val bottomTrim = seamAfter?.bottomTrim ?: 0
-          bottomTrim.coerceIn(0, bmp.height - cropTop - 1)
+          val effectiveBottomTrim = if (bottomTrim > 0) bottomTrim else detectedBottomNav
+          effectiveBottomTrim.coerceIn(0, bmp.height - cropTop - 1)
         }
 
         val sliceHeight = (bmp.height - cropTop - cropBottom).coerceAtLeast(1)
