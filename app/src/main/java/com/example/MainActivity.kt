@@ -32,10 +32,10 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
   private val viewModel: StitchViewModel by viewModels()
 
-  private var pendingIntervalMs: Long = 1000L
+  private var pendingIntervalMs: Long = 500L
   private var pendingDeduplicate: Boolean = true
   private var pendingAutoScroll: Boolean = false
-  private var pendingScrollSpeed: Float = 0.55f
+  private var pendingScrollSpeed: Float = 0.40f
 
   // MediaProjection permission launcher
   private val screenCaptureLauncher = registerForActivityResult(

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.provider.Settings
+import android.view.MotionEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -65,15 +66,18 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -85,10 +89,47 @@ import com.example.R
 import com.example.service.AutoScrollAccessibilityService
 import com.example.service.CaptureSessionState
 
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun rememberOverlayDragModifier(
+  onGetPosition: () -> Pair<Int, Int>,
+  onSetPosition: (x: Int, y: Int) -> Unit
+): Modifier {
+  var initialX by remember { mutableIntStateOf(0) }
+  var initialY by remember { mutableIntStateOf(0) }
+  var initialTouchX by remember { mutableFloatStateOf(0f) }
+  var initialTouchY by remember { mutableFloatStateOf(0f) }
+
+  return Modifier.pointerInteropFilter { motionEvent ->
+    when (motionEvent.action) {
+      MotionEvent.ACTION_DOWN -> {
+        val (curX, curY) = onGetPosition()
+        initialX = curX
+        initialY = curY
+        initialTouchX = motionEvent.rawX
+        initialTouchY = motionEvent.rawY
+        true
+      }
+      MotionEvent.ACTION_MOVE -> {
+        val dx = (motionEvent.rawX - initialTouchX).toInt()
+        val dy = (motionEvent.rawY - initialTouchY).toInt()
+        onSetPosition(initialX + dx, initialY + dy)
+        true
+      }
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+        true
+      }
+      else -> false
+    }
+  }
+}
+
 @Composable
 fun OverlayContentView(
   sessionState: CaptureSessionState,
   isExpanded: Boolean,
+  onGetPosition: () -> Pair<Int, Int>,
+  onSetPosition: (x: Int, y: Int) -> Unit,
   onToggleExpand: () -> Unit,
   onStartCapture: (intervalMs: Long, deduplicate: Boolean, autoScroll: Boolean, scrollSpeed: Float) -> Unit,
   onCaptureNow: () -> Unit,
@@ -104,6 +145,8 @@ fun OverlayContentView(
     // 1. Expanded Settings & Setup Panel
     OverlaySettingsCard(
       sessionState = sessionState,
+      onGetPosition = onGetPosition,
+      onSetPosition = onSetPosition,
       onCollapse = onToggleExpand,
       onStartCapture = onStartCapture,
       onCaptureNow = onCaptureNow,
@@ -113,6 +156,8 @@ fun OverlayContentView(
     // 2. Compact Active / Quick Floating Pill
     OverlayFloatingPill(
       sessionState = sessionState,
+      onGetPosition = onGetPosition,
+      onSetPosition = onSetPosition,
       onToggleExpand = onToggleExpand,
       onCaptureNow = onCaptureNow,
       onTogglePause = onTogglePause,
@@ -127,6 +172,8 @@ fun OverlayContentView(
 @Composable
 private fun OverlayFloatingPill(
   sessionState: CaptureSessionState,
+  onGetPosition: () -> Pair<Int, Int>,
+  onSetPosition: (x: Int, y: Int) -> Unit,
   onToggleExpand: () -> Unit,
   onCaptureNow: () -> Unit,
   onTogglePause: () -> Unit,
@@ -135,6 +182,7 @@ private fun OverlayFloatingPill(
   onCancelCapture: () -> Unit,
   onCloseOverlay: () -> Unit
 ) {
+  val dragModifier = rememberOverlayDragModifier(onGetPosition, onSetPosition)
   val infiniteTransition = rememberInfiniteTransition(label = "pill_pulse")
   val pulseScale by infiniteTransition.animateFloat(
     initialValue = 1f,
@@ -163,19 +211,20 @@ private fun OverlayFloatingPill(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-      // Drag Handle / Grip Indicator
+      // Drag Handle / Grip Indicator (Draggable knob on the far left)
       Box(
         modifier = Modifier
-          .size(28.dp)
+          .size(36.dp)
           .clip(CircleShape)
-          .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)),
+          .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+          .then(dragModifier),
         contentAlignment = Alignment.Center
       ) {
         Icon(
           Icons.Default.DragHandle,
           contentDescription = stringResource(R.string.overlay_drag_hint),
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(16.dp)
+          modifier = Modifier.size(20.dp)
         )
       }
 
@@ -347,12 +396,15 @@ private fun OverlayFloatingPill(
 @Composable
 private fun OverlaySettingsCard(
   sessionState: CaptureSessionState,
+  onGetPosition: () -> Pair<Int, Int>,
+  onSetPosition: (x: Int, y: Int) -> Unit,
   onCollapse: () -> Unit,
   onStartCapture: (intervalMs: Long, deduplicate: Boolean, autoScroll: Boolean, scrollSpeed: Float) -> Unit,
   onCaptureNow: () -> Unit,
   onClose: () -> Unit
 ) {
   val context = LocalContext.current
+  val dragModifier = rememberOverlayDragModifier(onGetPosition, onSetPosition)
   var selectedIntervalSec by remember { mutableFloatStateOf(sessionState.intervalSeconds) }
   var autoDeduplicate by remember { mutableStateOf(sessionState.autoDeduplicate) }
   var autoScrollEnabled by remember { mutableStateOf(sessionState.autoScrollEnabled) }
@@ -361,7 +413,7 @@ private fun OverlaySettingsCard(
   val isAccessibilityOn = remember(autoScrollEnabled) {
     AutoScrollAccessibilityService.isAccessibilityServiceEnabled(context)
   }
-  val intervalOptions = listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f)
+  val intervalOptions = listOf(0.2f, 0.3f, 0.4f, 0.5f)
 
   ElevatedCard(
     modifier = Modifier
@@ -380,9 +432,11 @@ private fun OverlaySettingsCard(
         .verticalScroll(rememberScrollState()),
       verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-      // Header
+      // Header with Drag support
       Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .then(dragModifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
@@ -513,7 +567,7 @@ private fun OverlaySettingsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
               ) {
-                listOf(0.40f to "40%", 0.55f to "55% ★", 0.70f to "70%").forEach { (ratio, label) ->
+                listOf(0.20f to "20%", 0.30f to "30%", 0.40f to "40% ★").forEach { (ratio, label) ->
                   val isSelected = scrollSpeedRatio == ratio
                   FilterChip(
                     selected = isSelected,
@@ -551,7 +605,12 @@ private fun OverlaySettingsCard(
               FilterChip(
                 selected = isSelected,
                 onClick = { selectedIntervalSec = sec },
-                label = { Text("${sec}s", style = MaterialTheme.typography.labelSmall) },
+                label = {
+                  Text(
+                    text = "${sec}s" + if (sec == 0.5f) " ★" else "",
+                    style = MaterialTheme.typography.labelSmall
+                  )
+                },
                 modifier = Modifier.weight(1f),
                 colors = FilterChipDefaults.filterChipColors(
                   selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

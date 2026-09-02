@@ -143,6 +143,24 @@ class OverlayService : Service() {
           OverlayContentView(
             sessionState = sessionState,
             isExpanded = isExpanded,
+            onGetPosition = {
+              val p = windowLayoutParams
+              Pair(p?.x ?: 0, p?.y ?: 0)
+            },
+            onSetPosition = { newX, newY ->
+              windowLayoutParams?.let { p ->
+                val displayMetrics = resources.displayMetrics
+                val screenWidth = displayMetrics.widthPixels
+                val screenHeight = displayMetrics.heightPixels
+                p.x = newX.coerceIn(-50, screenWidth - 50)
+                p.y = newY.coerceIn(0, screenHeight - 50)
+                try {
+                  windowManager?.updateViewLayout(floatingComposeView, p)
+                } catch (e: Exception) {
+                  e.printStackTrace()
+                }
+              }
+            },
             onToggleExpand = {
               isExpanded = !isExpanded
               ScreenCaptureStateHolder.updateState { it.copy(isOverlayExpanded = isExpanded) }
@@ -199,48 +217,6 @@ class OverlayService : Service() {
             }
           )
         }
-      }
-    }
-
-    // Touch Dragging Handler
-    var initialX = 0
-    var initialY = 0
-    var initialTouchX = 0f
-    var initialTouchY = 0f
-    var isDragging = false
-
-    composeView.setOnTouchListener { view, event ->
-      val p = windowLayoutParams ?: return@setOnTouchListener false
-      when (event.action) {
-        MotionEvent.ACTION_DOWN -> {
-          initialX = p.x
-          initialY = p.y
-          initialTouchX = event.rawX
-          initialTouchY = event.rawY
-          isDragging = false
-          false
-        }
-        MotionEvent.ACTION_MOVE -> {
-          val dx = (event.rawX - initialTouchX).toInt()
-          val dy = (event.rawY - initialTouchY).toInt()
-          if (!isDragging && (kotlin.math.abs(dx) > 10 || kotlin.math.abs(dy) > 10)) {
-            isDragging = true
-          }
-          if (isDragging) {
-            p.x = initialX + dx
-            p.y = initialY + dy
-            windowManager?.updateViewLayout(composeView, p)
-            true
-          } else {
-            false
-          }
-        }
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-          val dragged = isDragging
-          isDragging = false
-          dragged
-        }
-        else -> false
       }
     }
 

@@ -121,21 +121,23 @@ class ExampleRobolectricTest {
     val initialState = com.example.service.ScreenCaptureStateHolder.sessionState.value
     assertEquals(false, initialState.isRunning)
     assertEquals(0, initialState.capturedCount)
+    assertEquals(0.5f, initialState.intervalSeconds)
+    assertEquals(0.40f, initialState.scrollSpeedRatio)
 
     com.example.service.ScreenCaptureStateHolder.updateState {
-      it.copy(isRunning = true, capturedCount = 3, intervalSeconds = 1.5f)
+      it.copy(isRunning = true, capturedCount = 3, intervalSeconds = 0.5f)
     }
 
     val updatedState = com.example.service.ScreenCaptureStateHolder.sessionState.value
     assertEquals(true, updatedState.isRunning)
     assertEquals(3, updatedState.capturedCount)
-    assertEquals(1.5f, updatedState.intervalSeconds)
+    assertEquals(0.5f, updatedState.intervalSeconds)
 
     com.example.service.ScreenCaptureStateHolder.updateState {
-      it.copy(autoScrollEnabled = true, scrollSpeedRatio = 0.7f)
+      it.copy(autoScrollEnabled = true, scrollSpeedRatio = 0.40f)
     }
     assertEquals(true, com.example.service.ScreenCaptureStateHolder.sessionState.value.autoScrollEnabled)
-    assertEquals(0.7f, com.example.service.ScreenCaptureStateHolder.sessionState.value.scrollSpeedRatio)
+    assertEquals(0.40f, com.example.service.ScreenCaptureStateHolder.sessionState.value.scrollSpeedRatio)
 
     com.example.service.ScreenCaptureStateHolder.reset()
     assertEquals(false, com.example.service.ScreenCaptureStateHolder.sessionState.value.isRunning)
@@ -153,6 +155,19 @@ class ExampleRobolectricTest {
     // Verify clear method works
     viewModel.clearIncomingSharedUris()
     assertEquals(null, viewModel.incomingSharedUris.value)
+  }
+
+  @Test
+  fun `BatteryOptimizationUtil correctly reads and writes prompted state`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    
+    // Set to false and verify
+    com.example.util.BatteryOptimizationUtil.setPrompted(context, false)
+    assertEquals(false, com.example.util.BatteryOptimizationUtil.hasPrompted(context))
+
+    // Set to true and verify
+    com.example.util.BatteryOptimizationUtil.setPrompted(context, true)
+    assertEquals(true, com.example.util.BatteryOptimizationUtil.hasPrompted(context))
   }
 }
 

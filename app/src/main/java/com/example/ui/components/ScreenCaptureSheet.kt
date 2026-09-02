@@ -95,12 +95,12 @@ fun ScreenCaptureSheet(
   onDismiss: () -> Unit
 ) {
   val context = LocalContext.current
-  var selectedIntervalSec by remember { mutableFloatStateOf(1.0f) }
+  var selectedIntervalSec by remember { mutableFloatStateOf(0.5f) }
   var autoDeduplicate by remember { mutableStateOf(true) }
   var autoScrollEnabled by remember { mutableStateOf(false) }
-  var scrollSpeedRatio by remember { mutableFloatStateOf(0.55f) }
+  var scrollSpeedRatio by remember { mutableFloatStateOf(0.40f) }
 
-  val intervalOptions = listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f)
+  val intervalOptions = listOf(0.2f, 0.3f, 0.4f, 0.5f)
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -544,7 +544,7 @@ private fun CaptureConfigurationView(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-              listOf(0.40f to "40%", 0.55f to "55% ★", 0.70f to "70%").forEach { (ratio, label) ->
+              listOf(0.20f to "20%", 0.30f to "30%", 0.40f to "40% ★").forEach { (ratio, label) ->
                 val isSelected = scrollSpeedRatio == ratio
                 FilterChip(
                   selected = isSelected,
@@ -606,7 +606,7 @@ private fun CaptureConfigurationView(
               onClick = { onSelectInterval(sec) },
               label = {
                 Text(
-                  text = "${sec}s" + if (sec == 1.0f) " ★" else "",
+                  text = "${sec}s" + if (sec == 0.5f) " ★" else "",
                   fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
               },

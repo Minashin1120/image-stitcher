@@ -198,4 +198,14 @@
     <string name="settings_overlay_title">Floating Overlay Controls</string>
     <string name="settings_overlay_desc">Show draggable floating settings &amp; controls over other apps for hands-free long screenshot stitching</string>
     <string name="btn_open_floating_controls">Open Floating Controls</string>
+    <string name="settings_battery_optimization_title">Battery Optimization</string>
+    <string name="settings_battery_optimization_desc">Keep background screen capture, auto-scrolling, and quick launch notifications running reliably without being killed by Android.</string>
+    <string name="settings_battery_status_exempted">Exempted (Unrestricted)</string>
+    <string name="settings_battery_status_optimized">Optimized (May be restricted)</string>
+    <string name="btn_exempt_battery_optimization">Ignore Battery Optimization</string>
+    <string name="btn_open_battery_settings">Open Battery Settings</string>
+    <string name="battery_dialog_title">Disable Battery Optimization</string>
+    <string name="battery_dialog_message">To ensure continuous screen capture, auto-scrolling, and quick launch notifications work reliably in the background without interruptions, please allow this app to ignore battery optimizations.\n\nWould you like to exempt it now?</string>
+    <string name="btn_battery_exempt_now">Exempt Now</string>
+    <string name="btn_battery_exempt_later">Later</string>
 </resources>

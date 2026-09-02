@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Edit
@@ -123,6 +124,13 @@ fun MainScreen(
   var activeFineTunePairIndex by remember { mutableStateOf<Int?>(null) }
   var activeEditingImageIndex by remember { mutableStateOf<Int?>(null) }
   var standaloneEditingUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+  var showBatteryOptimizationDialog by remember {
+    mutableStateOf(
+      !com.example.util.BatteryOptimizationUtil.hasPrompted(context) &&
+      !com.example.util.BatteryOptimizationUtil.isIgnoringBatteryOptimizations(context)
+    )
+  }
 
   // Modern Android Photo Picker contract (Multiple images for stitching)
   val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -713,6 +721,61 @@ fun MainScreen(
         }
       )
     }
+  }
+
+  // First-launch Battery Optimization Exemption Dialog
+  if (showBatteryOptimizationDialog) {
+    AlertDialog(
+      onDismissRequest = {
+        com.example.util.BatteryOptimizationUtil.setPrompted(context, true)
+        showBatteryOptimizationDialog = false
+      },
+      icon = {
+        Icon(
+          Icons.Default.BatterySaver,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(28.dp)
+        )
+      },
+      title = {
+        Text(
+          text = stringResource(R.string.battery_dialog_title),
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold
+        )
+      },
+      text = {
+        Text(
+          text = stringResource(R.string.battery_dialog_message),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            com.example.util.BatteryOptimizationUtil.setPrompted(context, true)
+            com.example.util.BatteryOptimizationUtil.requestIgnoreBatteryOptimization(context)
+            showBatteryOptimizationDialog = false
+          },
+          modifier = Modifier.testTag("btn_battery_exempt_confirm")
+        ) {
+          Text(stringResource(R.string.btn_battery_exempt_now))
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = {
+            com.example.util.BatteryOptimizationUtil.setPrompted(context, true)
+            showBatteryOptimizationDialog = false
+          },
+          modifier = Modifier.testTag("btn_battery_exempt_dismiss")
+        ) {
+          Text(stringResource(R.string.btn_battery_exempt_later))
+        }
+      }
+    )
   }
 }
 

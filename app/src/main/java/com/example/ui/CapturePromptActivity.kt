@@ -32,10 +32,10 @@ class CapturePromptActivity : ComponentActivity() {
 
     fun startDirectCapture(
       context: Context,
-      intervalMs: Long = 1000L,
+      intervalMs: Long = 500L,
       autoDeduplicate: Boolean = true,
       autoScroll: Boolean = false,
-      scrollSpeed: Float = 0.55f,
+      scrollSpeed: Float = 0.40f,
       showOverlay: Boolean = true
     ) {
       val intent = Intent(context, CapturePromptActivity::class.java).apply {
@@ -60,10 +60,10 @@ class CapturePromptActivity : ComponentActivity() {
     }
   }
 
-  private var intervalMs: Long = 1000L
+  private var intervalMs: Long = 500L
   private var autoDeduplicate: Boolean = true
   private var autoScroll: Boolean = false
-  private var scrollSpeed: Float = 0.55f
+  private var scrollSpeed: Float = 0.40f
   private var showOverlay: Boolean = true
 
   private val screenCaptureLauncher = registerForActivityResult(
@@ -100,10 +100,10 @@ class CapturePromptActivity : ComponentActivity() {
       return
     }
 
-    intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 1000L)
+    intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 500L)
     autoDeduplicate = intent.getBooleanExtra(EXTRA_DEDUPLICATE, true)
     autoScroll = intent.getBooleanExtra(EXTRA_AUTO_SCROLL, false)
-    scrollSpeed = intent.getFloatExtra(EXTRA_SCROLL_SPEED, 0.55f)
+    scrollSpeed = intent.getFloatExtra(EXTRA_SCROLL_SPEED, 0.40f)
     showOverlay = intent.getBooleanExtra(EXTRA_SHOW_OVERLAY, true)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

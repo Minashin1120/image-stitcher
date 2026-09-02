@@ -44,7 +44,7 @@ class AutoScrollAccessibilityService : AccessibilityService() {
       return false
     }
 
-    suspend fun performScroll(scrollDistanceRatio: Float = 0.55f, durationMs: Long = 300L): Boolean {
+    suspend fun performScroll(scrollDistanceRatio: Float = 0.40f, durationMs: Long = 200L): Boolean {
       val service = instance ?: return false
       return service.executeScrollGesture(scrollDistanceRatio, durationMs)
     }
@@ -84,7 +84,7 @@ class AutoScrollAccessibilityService : AccessibilityService() {
     val endX = width / 2f
     // For scrolling downward through a page (swiping finger upward)
     val startY = height * 0.70f
-    val clampedRatio = scrollDistanceRatio.coerceIn(0.2f, 0.8f)
+    val clampedRatio = scrollDistanceRatio.coerceIn(0.1f, 0.40f)
     val endY = startY - (height * clampedRatio)
 
     val path = Path().apply {

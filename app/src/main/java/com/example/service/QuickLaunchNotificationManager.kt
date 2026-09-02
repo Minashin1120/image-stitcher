@@ -84,10 +84,10 @@ object QuickLaunchNotificationManager {
     // Action 2: 📸 Quick Start Capture
     val promptIntent = Intent(context, CapturePromptActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-      putExtra(CapturePromptActivity.EXTRA_INTERVAL_MS, 1000L)
+      putExtra(CapturePromptActivity.EXTRA_INTERVAL_MS, 500L)
       putExtra(CapturePromptActivity.EXTRA_DEDUPLICATE, true)
       putExtra(CapturePromptActivity.EXTRA_AUTO_SCROLL, false)
-      putExtra(CapturePromptActivity.EXTRA_SCROLL_SPEED, 0.55f)
+      putExtra(CapturePromptActivity.EXTRA_SCROLL_SPEED, 0.40f)
       putExtra(CapturePromptActivity.EXTRA_SHOW_OVERLAY, true)
     }
     val promptPendingIntent = PendingIntent.getActivity(

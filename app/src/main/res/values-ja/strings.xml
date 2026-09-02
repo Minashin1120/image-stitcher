@@ -198,4 +198,14 @@
     <string name="settings_overlay_title">フローティング操作パネル</string>
     <string name="settings_overlay_desc">他のアプリを開きながらキャプチャの開始・一時停止・結合を行える操作パネルを表示します</string>
     <string name="btn_open_floating_controls">フローティング操作を開く</string>
+    <string name="settings_battery_optimization_title">バッテリー最適化の除外</string>
+    <string name="settings_battery_optimization_desc">長尺画面の連続キャプチャや自動スクロール、常駐通知がバックグラウンドで突然停止するのを防ぎます</string>
+    <string name="settings_battery_status_exempted">最適化から除外済み（制限なし）</string>
+    <string name="settings_battery_status_optimized">最適化中（バックグラウンドで停止される可能性あり）</string>
+    <string name="btn_exempt_battery_optimization">バッテリー最適化を除外する</string>
+    <string name="btn_open_battery_settings">バッテリー設定を開く</string>
+    <string name="battery_dialog_title">バッテリー最適化の除外について</string>
+    <string name="battery_dialog_message">連続画面キャプチャや自動スクロール、常駐クイック起動通知がバックグラウンドで中断されずに安定して動作するために、バッテリー最適化の除外を推奨しています。\n\n今すぐ除外設定を行いますか？</string>
+    <string name="btn_battery_exempt_now">除外する</string>
+    <string name="btn_battery_exempt_later">あとで</string>
 </resources>

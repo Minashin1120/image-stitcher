@@ -71,10 +71,10 @@ class ScreenCaptureService : Service() {
   private var screenHeight = 2400
   private var screenDensity = DisplayMetrics.DENSITY_DEFAULT
 
-  private var intervalMs = 1000L
+  private var intervalMs = 500L
   private var autoDeduplicate = true
   private var autoScrollEnabled = false
-  private var scrollSpeedRatio = 0.55f
+  private var scrollSpeedRatio = 0.40f
   private var isPaused = false
 
   private val capturedFiles = mutableListOf<File>()
@@ -110,10 +110,10 @@ class ScreenCaptureService : Service() {
           @Suppress("DEPRECATION")
           intent.getParcelableExtra(EXTRA_RESULT_DATA)
         }
-        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 1000L).coerceAtLeast(400L)
+        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 500L).coerceIn(100L, 500L)
         autoDeduplicate = intent.getBooleanExtra(EXTRA_DEDUPLICATE, true)
         autoScrollEnabled = intent.getBooleanExtra(EXTRA_AUTO_SCROLL, false)
-        scrollSpeedRatio = intent.getFloatExtra(EXTRA_SCROLL_SPEED, 0.55f).coerceIn(0.2f, 0.8f)
+        scrollSpeedRatio = intent.getFloatExtra(EXTRA_SCROLL_SPEED, 0.40f).coerceIn(0.1f, 0.40f)
 
         if (resultCode != 0 && resultData != null) {
           startForegroundWithNotification()
@@ -347,9 +347,9 @@ class ScreenCaptureService : Service() {
         if (!isPaused) {
           if (autoScrollEnabled) {
             // Auto scroll down content
-            AutoScrollAccessibilityService.performScroll(scrollSpeedRatio, 320L)
+            AutoScrollAccessibilityService.performScroll(scrollSpeedRatio, 180L)
             // Wait for scroll animation to finish and UI to render
-            delay(400L)
+            delay(120L)
           }
           captureCurrentFrame()
         }
