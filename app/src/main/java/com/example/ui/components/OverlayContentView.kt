@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,12 +94,15 @@ import com.example.service.CaptureSessionState
 @Composable
 private fun rememberOverlayDragModifier(
   onGetPosition: () -> Pair<Int, Int>,
-  onSetPosition: (x: Int, y: Int) -> Unit
+  onSetPosition: (x: Int, y: Int) -> Unit,
+  onTap: (() -> Unit)? = null
 ): Modifier {
   var initialX by remember { mutableIntStateOf(0) }
   var initialY by remember { mutableIntStateOf(0) }
   var initialTouchX by remember { mutableFloatStateOf(0f) }
   var initialTouchY by remember { mutableFloatStateOf(0f) }
+  var isDragging by remember { mutableStateOf(false) }
+  val touchSlopPx = with(LocalDensity.current) { 10.dp.toPx() }
 
   return Modifier.pointerInteropFilter { motionEvent ->
     when (motionEvent.action) {
@@ -108,15 +112,29 @@ private fun rememberOverlayDragModifier(
         initialY = curY
         initialTouchX = motionEvent.rawX
         initialTouchY = motionEvent.rawY
+        isDragging = false
         true
       }
       MotionEvent.ACTION_MOVE -> {
-        val dx = (motionEvent.rawX - initialTouchX).toInt()
-        val dy = (motionEvent.rawY - initialTouchY).toInt()
-        onSetPosition(initialX + dx, initialY + dy)
+        val dx = motionEvent.rawX - initialTouchX
+        val dy = motionEvent.rawY - initialTouchY
+        if (!isDragging && (kotlin.math.abs(dx) > touchSlopPx || kotlin.math.abs(dy) > touchSlopPx)) {
+          isDragging = true
+        }
+        if (isDragging) {
+          onSetPosition((initialX + dx).toInt(), (initialY + dy).toInt())
+        }
         true
       }
-      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+      MotionEvent.ACTION_UP -> {
+        if (!isDragging) {
+          onTap?.invoke()
+        }
+        isDragging = false
+        true
+      }
+      MotionEvent.ACTION_CANCEL -> {
+        isDragging = false
         true
       }
       else -> false
@@ -404,7 +422,7 @@ private fun OverlaySettingsCard(
   onClose: () -> Unit
 ) {
   val context = LocalContext.current
-  val dragModifier = rememberOverlayDragModifier(onGetPosition, onSetPosition)
+  val dragAndCollapseModifier = rememberOverlayDragModifier(onGetPosition, onSetPosition, onTap = onCollapse)
   var selectedIntervalSec by remember { mutableFloatStateOf(sessionState.intervalSeconds) }
   var autoDeduplicate by remember { mutableStateOf(sessionState.autoDeduplicate) }
   var autoScrollEnabled by remember { mutableStateOf(sessionState.autoScrollEnabled) }
@@ -428,19 +446,41 @@ private fun OverlaySettingsCard(
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp)
+        .padding(horizontal = 16.dp, vertical = 12.dp)
         .verticalScroll(rememberScrollState()),
-      verticalArrangement = Arrangement.spacedBy(12.dp)
+      verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-      // Header with Drag support
-      Row(
+      // Top Drag Handle & Tap to Collapse Bar
+      Box(
         modifier = Modifier
           .fillMaxWidth()
-          .then(dragModifier),
+          .then(dragAndCollapseModifier)
+          .padding(top = 2.dp, bottom = 4.dp),
+        contentAlignment = Alignment.Center
+      ) {
+        Box(
+          modifier = Modifier
+            .width(40.dp)
+            .height(5.dp)
+            .clip(RoundedCornerShape(2.5.dp))
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+        )
+      }
+
+      // Header with Title (draggable & tappable to collapse) and Action Buttons
+      Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Tappable and Draggable Title Area
+        Row(
+          modifier = Modifier
+            .weight(1f)
+            .then(dragAndCollapseModifier)
+            .padding(vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
           Surface(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
@@ -472,12 +512,21 @@ private fun OverlaySettingsCard(
           }
         }
 
+        // Action Buttons: Collapse and Close
         Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(onClick = onCollapse, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ExpandLess, contentDescription = stringResource(R.string.overlay_minimize))
+          IconButton(onClick = onCollapse, modifier = Modifier.size(36.dp)) {
+            Icon(
+              Icons.Default.ExpandLess,
+              contentDescription = stringResource(R.string.overlay_minimize),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
           }
-          IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cd_close))
+          IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+            Icon(
+              Icons.Default.Close,
+              contentDescription = stringResource(R.string.cd_close),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
           }
         }
       }
