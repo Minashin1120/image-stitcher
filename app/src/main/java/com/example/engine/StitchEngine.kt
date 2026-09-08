@@ -683,6 +683,7 @@ object StitchEngine {
     images: List<ImageItem>,
     seams: List<SeamConfig>,
     settings: StitchGlobalSettings,
+    removeOverlap: Boolean = true,
     onProgress: (Float, String) -> Unit
   ): Result<StitchResult> = withContext(Dispatchers.IO) {
     if (images.size < 2) {
@@ -714,51 +715,73 @@ object StitchEngine {
 
       for (i in bitmaps.indices) {
         val bmp = bitmaps[i]
-        val seamBefore = if (i > 0) seams.getOrNull(i - 1) ?: SeamConfig() else null
-        val seamAfter = if (i < bitmaps.size - 1) seams.getOrNull(i) ?: SeamConfig() else null
+        val cropTop: Int
+        val cropBottom: Int
+        val sliceHeight: Int
+        val renderedHeight: Int
 
-        // Crop top:
-        // For image 0: remove status bar if enabled or if auto-detected.
-        // For image i > 0: crop seamBefore.topTrim + seamBefore.totalOverlap!
-        val detectedTopTrim = seams.map { it.topTrim }.filter { it > 0 }.maxOrNull() ?: 0
-        val cropTop: Int = if (i == 0) {
-          if (settings.removeStatusBar) {
-            maxOf(settings.statusBarHeightPx, detectedTopTrim).coerceAtMost(bmp.height / 4)
-          } else 0
-        } else {
-          val overlap = seamBefore?.totalOverlap ?: 0
-          val topTrim = seamBefore?.topTrim ?: 0
-          (overlap + topTrim).coerceIn(0, bmp.height - 1)
-        }
-
-        // Crop bottom:
-        // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (strictly excludes bottom nav bar).
-        // For the last image (i == bitmaps.size - 1): automatically crop detected bottom nav bar so final image is clean.
-        val detectedBottomNav = seams.map { it.bottomTrim }.filter { it > 0 }.maxOrNull() ?: 0
-        val cropBottom: Int = if (i == bitmaps.size - 1) {
-          if (settings.removeNavBar) {
-            maxOf(settings.navBarHeightPx, detectedBottomNav).coerceAtMost(bmp.height / 4)
-          } else if (detectedBottomNav > 0 && settings.autoDetectOverlap) {
-            detectedBottomNav.coerceAtMost(bmp.height / 4)
+        if (!removeOverlap) {
+          cropTop = 0
+          cropBottom = 0
+          sliceHeight = bmp.height
+          renderedHeight = if (bmp.width > 0 && bmp.width != targetWidth) {
+            (sliceHeight.toFloat() * targetWidth / bmp.width).roundToInt()
           } else {
-            0
+            sliceHeight
           }
         } else {
-          val bottomTrim = seamAfter?.bottomTrim ?: 0
-          val effectiveBottomTrim = if (bottomTrim > 0) bottomTrim else detectedBottomNav
-          effectiveBottomTrim.coerceIn(0, bmp.height - cropTop - 1)
+          val seamBefore = if (i > 0) seams.getOrNull(i - 1) ?: SeamConfig() else null
+          val seamAfter = if (i < bitmaps.size - 1) seams.getOrNull(i) ?: SeamConfig() else null
+
+          // Crop top:
+          // For image 0: remove status bar if enabled or if auto-detected.
+          // For image i > 0: crop seamBefore.topTrim + seamBefore.totalOverlap!
+          val detectedTopTrim = seams.map { it.topTrim }.filter { it > 0 }.maxOrNull() ?: 0
+          cropTop = if (i == 0) {
+            if (settings.removeStatusBar) {
+              maxOf(settings.statusBarHeightPx, detectedTopTrim).coerceAtMost(bmp.height / 4)
+            } else 0
+          } else {
+            val overlap = seamBefore?.totalOverlap ?: 0
+            val topTrim = seamBefore?.topTrim ?: 0
+            (overlap + topTrim).coerceIn(0, bmp.height - 1)
+          }
+
+          // Crop bottom:
+          // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (strictly excludes bottom nav bar).
+          // For the last image (i == bitmaps.size - 1): automatically crop detected bottom nav bar so final image is clean.
+          val detectedBottomNav = seams.map { it.bottomTrim }.filter { it > 0 }.maxOrNull() ?: 0
+          cropBottom = if (i == bitmaps.size - 1) {
+            if (settings.removeNavBar) {
+              maxOf(settings.navBarHeightPx, detectedBottomNav).coerceAtMost(bmp.height / 4)
+            } else if (detectedBottomNav > 0 && settings.autoDetectOverlap) {
+              detectedBottomNav.coerceAtMost(bmp.height / 4)
+            } else {
+              0
+            }
+          } else {
+            val bottomTrim = seamAfter?.bottomTrim ?: 0
+            val effectiveBottomTrim = if (bottomTrim > 0) bottomTrim else detectedBottomNav
+            effectiveBottomTrim.coerceIn(0, bmp.height - cropTop - 1)
+          }
+
+          sliceHeight = (bmp.height - cropTop - cropBottom).coerceAtLeast(1)
+          renderedHeight = if (bmp.width > 0 && bmp.width != targetWidth) {
+            (sliceHeight.toFloat() * targetWidth / bmp.width).roundToInt()
+          } else {
+            sliceHeight
+          }
+
+          if (seamBefore != null) {
+            totalOverlapRemoved += seamBefore.totalOverlap
+          }
         }
 
-        val sliceHeight = (bmp.height - cropTop - cropBottom).coerceAtLeast(1)
         val srcRect = Rect(0, cropTop, bmp.width, cropTop + sliceHeight)
-        val dstRect = Rect(0, totalHeight, targetWidth, totalHeight + sliceHeight)
+        val dstRect = Rect(0, totalHeight, targetWidth, totalHeight + renderedHeight)
 
         drawOperations.add(DrawOp(bitmap = bmp, srcRect = srcRect, dstRect = dstRect))
-        totalHeight += sliceHeight
-
-        if (seamBefore != null) {
-          totalOverlapRemoved += seamBefore.totalOverlap
-        }
+        totalHeight += renderedHeight
       }
 
       onProgress(
@@ -802,47 +825,49 @@ object StitchEngine {
       }
 
       // Micro-alpha blending across seams for 100% artifact-free seamless blending
-      // (Removes any hairline color/blur differences across seam boundaries)
-      val blendRadius = 3
-      val blendWidth = finalOutputBitmap.width
-      val blendPixels = IntArray(blendWidth)
-      val srcPixels1 = IntArray(blendWidth)
-      val srcPixels2 = IntArray(blendWidth)
+      // (Only when removing overlaps, so images in direct-join mode preserve edge pixels completely)
+      if (removeOverlap) {
+        val blendRadius = 3
+        val blendWidth = finalOutputBitmap.width
+        val blendPixels = IntArray(blendWidth)
+        val srcPixels1 = IntArray(blendWidth)
+        val srcPixels2 = IntArray(blendWidth)
 
-      for (i in 0 until drawOperations.size - 1) {
-        val op1 = drawOperations[i]
-        val op2 = drawOperations[i + 1]
-        val seamY = if (isScaled) (op1.dstRect.bottom * globalScale).roundToInt() else op1.dstRect.bottom
+        for (i in 0 until drawOperations.size - 1) {
+          val op1 = drawOperations[i]
+          val op2 = drawOperations[i + 1]
+          val seamY = if (isScaled) (op1.dstRect.bottom * globalScale).roundToInt() else op1.dstRect.bottom
 
-        for (offset in -blendRadius until blendRadius) {
-          val currentY = seamY + offset
-          if (currentY <= 0 || currentY >= finalOutputBitmap.height - 1) continue
+          for (offset in -blendRadius until blendRadius) {
+            val currentY = seamY + offset
+            if (currentY <= 0 || currentY >= finalOutputBitmap.height - 1) continue
 
-          val t = (offset + blendRadius + 0.5f) / (2f * blendRadius)
-          val yInBmp1 = op1.srcRect.bottom + offset
-          val yInBmp2 = op2.srcRect.top + offset
+            val t = (offset + blendRadius + 0.5f) / (2f * blendRadius)
+            val yInBmp1 = op1.srcRect.bottom + offset
+            val yInBmp2 = op2.srcRect.top + offset
 
-          if (yInBmp1 in 0 until op1.bitmap.height && yInBmp2 in 0 until op2.bitmap.height) {
-            val copyW = minOf(blendWidth, op1.bitmap.width, op2.bitmap.width)
-            op1.bitmap.getPixels(srcPixels1, 0, op1.bitmap.width, 0, yInBmp1, copyW, 1)
-            op2.bitmap.getPixels(srcPixels2, 0, op2.bitmap.width, 0, yInBmp2, copyW, 1)
+            if (yInBmp1 in 0 until op1.bitmap.height && yInBmp2 in 0 until op2.bitmap.height) {
+              val copyW = minOf(blendWidth, op1.bitmap.width, op2.bitmap.width)
+              op1.bitmap.getPixels(srcPixels1, 0, op1.bitmap.width, 0, yInBmp1, copyW, 1)
+              op2.bitmap.getPixels(srcPixels2, 0, op2.bitmap.width, 0, yInBmp2, copyW, 1)
 
-            for (x in 0 until copyW) {
-              val c1 = srcPixels1[x]
-              val c2 = srcPixels2[x]
+              for (x in 0 until copyW) {
+                val c1 = srcPixels1[x]
+                val c2 = srcPixels2[x]
 
-              val a1 = Color.alpha(c1); val r1 = Color.red(c1); val g1 = Color.green(c1); val b1 = Color.blue(c1)
-              val a2 = Color.alpha(c2); val r2 = Color.red(c2); val g2 = Color.green(c2); val b2 = Color.blue(c2)
+                val a1 = Color.alpha(c1); val r1 = Color.red(c1); val g1 = Color.green(c1); val b1 = Color.blue(c1)
+                val a2 = Color.alpha(c2); val r2 = Color.red(c2); val g2 = Color.green(c2); val b2 = Color.blue(c2)
 
-              val a = (a1 * (1f - t) + a2 * t).roundToInt().coerceIn(0, 255)
-              val r = (r1 * (1f - t) + r2 * t).roundToInt().coerceIn(0, 255)
-              val g = (g1 * (1f - t) + g2 * t).roundToInt().coerceIn(0, 255)
-              val b = (b1 * (1f - t) + b2 * t).roundToInt().coerceIn(0, 255)
+                val a = (a1 * (1f - t) + a2 * t).roundToInt().coerceIn(0, 255)
+                val r = (r1 * (1f - t) + r2 * t).roundToInt().coerceIn(0, 255)
+                val g = (g1 * (1f - t) + g2 * t).roundToInt().coerceIn(0, 255)
+                val b = (b1 * (1f - t) + b2 * t).roundToInt().coerceIn(0, 255)
 
-              blendPixels[x] = Color.argb(a, r, g, b)
+                blendPixels[x] = Color.argb(a, r, g, b)
+              }
+
+              finalOutputBitmap.setPixels(blendPixels, 0, blendWidth, 0, currentY, copyW, 1)
             }
-
-            finalOutputBitmap.setPixels(blendPixels, 0, blendWidth, 0, currentY, copyW, 1)
           }
         }
       }
@@ -869,7 +894,8 @@ object StitchEngine {
         height = finalOutputBitmap.height,
         fileSizeBytes = outputFile.length(),
         sourceCount = images.size,
-        totalOverlapRemoved = totalOverlapRemoved
+        totalOverlapRemoved = if (removeOverlap) totalOverlapRemoved else 0,
+        isDirectJoin = !removeOverlap
       )
 
       onProgress(1.0f, context.getString(R.string.progress_complete))

@@ -6,7 +6,9 @@
     <string name="cd_settings">設定</string>
     <string name="share_chooser_title">結合したスクリーンショットを共有</string>
     <string name="btn_add_more">追加</string>
-    <string name="btn_stitch_now">%1$d枚を結合</string>
+    <string name="btn_stitch_now">重複削除して結合 (%1$d枚)</string>
+    <string name="btn_stitch_direct">そのまま結合</string>
+    <string name="btn_stitch_direct_tooltip">重複部分を削除せず、画像をそのまま縦につなぎ合わせます</string>
     <string name="header_queued_count">%1$d枚のスクリーンショット</string>
     <string name="btn_add">+ 追加</string>
     <string name="hint_single_image">重複部分を検出して結合するには、スクリーンショットをもう1枚以上追加してください。</string>
@@ -16,8 +18,10 @@
     <string name="feature_auto_detect">ピクセル単位の高精度な自動重複検出</string>
     <string name="feature_trim_bars">ステータスバー・ナビゲーションバーの自動トリミング</string>
     <string name="feature_fine_tune">結合部のインタラクティブな微調整＆プレビュー</string>
+    <string name="feature_direct_join">重複削除なしの「そのまま結合」モードにもワンタップで対応</string>
     <string name="detecting_pair_progress">ペア %1$d/%2$d の重複を検出中…</string>
     <string name="stitching_dialog_title">スクリーンショットを結合中…</string>
+    <string name="stitching_dialog_title_direct">画像を結合中（重複削除なし）…</string>
     <string name="stitch_error_title">結合エラー</string>
     <string name="btn_ok">OK</string>
     <string name="btn_cancel">キャンセル</string>
@@ -65,9 +69,11 @@
     <string name="settings_output_format_title">出力画像フォーマット</string>
     <string name="result_title">結合済みスクリーンショット</string>
     <string name="result_subtitle">%1$d × %2$d px • %3$d枚を結合</string>
+    <string name="result_subtitle_direct">%1$d × %2$d px • %3$d枚をそのまま連結</string>
     <string name="cd_back_to_editor">エディタに戻る</string>
     <string name="cd_reset_zoom">ズームをリセット</string>
     <string name="result_overlap_merged">-%1$dpx の重複を結合</string>
+    <string name="result_badge_direct_join">そのまま結合（重複削除なし）</string>
     <string name="btn_share">共有</string>
     <string name="btn_save_to_gallery">ギャラリーに保存</string>
     <string name="cd_stitched_long_screenshot">結合された長尺スクリーンショット</string>

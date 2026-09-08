@@ -54,13 +54,18 @@ data class StitchResult(
   val height: Int,
   val fileSizeBytes: Long,
   val sourceCount: Int = 1,
-  val totalOverlapRemoved: Int = 0
+  val totalOverlapRemoved: Int = 0,
+  val isDirectJoin: Boolean = false
 )
 
 sealed interface StitchUiState {
   data object Idle : StitchUiState
   data class Detecting(val currentPair: Int, val totalPairs: Int) : StitchUiState
-  data class Stitching(val progress: Float, val statusMessage: String) : StitchUiState
+  data class Stitching(
+    val progress: Float,
+    val statusMessage: String,
+    val isDirect: Boolean = false
+  ) : StitchUiState
   data class Success(val result: StitchResult) : StitchUiState
   data class Error(val message: String) : StitchUiState
 }

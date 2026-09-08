@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -118,12 +119,21 @@ fun ResultView(
             )
             Text(
               if (result.sourceCount > 1) {
-                stringResource(
-                  R.string.result_subtitle,
-                  result.width,
-                  result.height,
-                  result.sourceCount
-                )
+                if (result.isDirectJoin) {
+                  stringResource(
+                    R.string.result_subtitle_direct,
+                    result.width,
+                    result.height,
+                    result.sourceCount
+                  )
+                } else {
+                  stringResource(
+                    R.string.result_subtitle,
+                    result.width,
+                    result.height,
+                    result.sourceCount
+                  )
+                }
               } else {
                 stringResource(
                   R.string.single_image_edit_result_subtitle,
@@ -209,7 +219,30 @@ fun ResultView(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
               )
             }
-            if (result.totalOverlapRemoved > 0) {
+            if (result.isDirectJoin) {
+              Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                  verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                  Icon(
+                    Icons.Default.Layers,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(14.dp)
+                  )
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text(
+                    text = stringResource(R.string.result_badge_direct_join),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                  )
+                }
+              }
+            } else if (result.totalOverlapRemoved > 0) {
               Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.tertiaryContainer

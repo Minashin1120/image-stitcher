@@ -343,34 +343,67 @@ fun MainScreen(
           tonalElevation = 6.dp,
           color = MaterialTheme.colorScheme.surface
         ) {
-          Row(
+          Column(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+              .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
           ) {
-            OutlinedButton(
-              onClick = {
-                photoPickerLauncher.launch(
-                  PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-              },
-              modifier = Modifier
-                .weight(1f)
-                .height(52.dp)
-                .testTag("btn_add_more_bottom"),
-              shape = RoundedCornerShape(14.dp)
+            // Secondary row: Add More & Direct Join (Without Overlap Removal)
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(stringResource(R.string.btn_add_more))
+              OutlinedButton(
+                onClick = {
+                  photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                  )
+                },
+                modifier = Modifier
+                  .weight(1f)
+                  .height(48.dp)
+                  .testTag("btn_add_more_bottom"),
+                shape = RoundedCornerShape(12.dp)
+              ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  stringResource(R.string.btn_add_more),
+                  maxLines = 1,
+                  style = MaterialTheme.typography.labelLarge
+                )
+              }
+
+              FilledTonalButton(
+                onClick = { viewModel.stitchDirectly() },
+                modifier = Modifier
+                  .weight(1.35f)
+                  .height(48.dp)
+                  .testTag("btn_stitch_direct"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                  containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                  contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+              ) {
+                Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  stringResource(R.string.btn_stitch_direct),
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.SemiBold,
+                  maxLines = 1
+                )
+              }
             }
 
+            // Primary action: Auto Overlap Detection & Removal Stitch
             Button(
               onClick = { viewModel.stitchNow() },
               modifier = Modifier
-                .weight(1.6f)
+                .fillMaxWidth()
                 .height(52.dp)
                 .testTag("btn_stitch_now"),
               shape = RoundedCornerShape(14.dp),
@@ -597,7 +630,8 @@ fun MainScreen(
               confirmButton = {},
               title = {
                 Text(
-                  stringResource(R.string.stitching_dialog_title),
+                  if (state.isDirect) stringResource(R.string.stitching_dialog_title_direct)
+                  else stringResource(R.string.stitching_dialog_title),
                   style = MaterialTheme.typography.titleMedium,
                   fontWeight = FontWeight.Bold
                 )
@@ -914,6 +948,10 @@ private fun EmptyStateView(
         FeatureHintItem(
           icon = Icons.Default.TouchApp,
           text = stringResource(R.string.feature_fine_tune)
+        )
+        FeatureHintItem(
+          icon = Icons.Default.Layers,
+          text = stringResource(R.string.feature_direct_join)
         )
       }
     }

@@ -6,7 +6,9 @@
     <string name="cd_settings">Settings</string>
     <string name="share_chooser_title">Share Stitched Screenshot</string>
     <string name="btn_add_more">Add More</string>
-    <string name="btn_stitch_now">Stitch %1$d Shots</string>
+    <string name="btn_stitch_now">Stitch %1$d Shots (Remove Overlaps)</string>
+    <string name="btn_stitch_direct">Simple Join</string>
+    <string name="btn_stitch_direct_tooltip">Join images directly without removing duplicate or overlapping parts</string>
     <string name="header_queued_count">%1$d screenshots queued</string>
     <string name="btn_add">+ Add</string>
     <string name="hint_single_image">Please add at least 1 more screenshot to detect overlaps and stitch.</string>
@@ -16,8 +18,10 @@
     <string name="feature_auto_detect">Pixel-accurate auto overlap detection</string>
     <string name="feature_trim_bars">Optional status bar &amp; navigation bar trimming</string>
     <string name="feature_fine_tune">Interactive manual seam fine-tuning &amp; preview</string>
+    <string name="feature_direct_join">Simple join mode: combine images directly without removing overlaps</string>
     <string name="detecting_pair_progress">Detecting overlap for pair %1$d/%2$d…</string>
     <string name="stitching_dialog_title">Stitching Screenshots…</string>
+    <string name="stitching_dialog_title_direct">Joining Screenshots (No Overlap Removal)…</string>
     <string name="stitch_error_title">Stitch Error</string>
     <string name="btn_ok">OK</string>
     <string name="btn_cancel">Cancel</string>
@@ -65,9 +69,11 @@
     <string name="settings_output_format_title">Output Image Format</string>
     <string name="result_title">Stitched Screenshot</string>
     <string name="result_subtitle">%1$d × %2$d px • %3$d shots joined</string>
+    <string name="result_subtitle_direct">%1$d × %2$d px • %3$d shots joined directly</string>
     <string name="cd_back_to_editor">Back to editor</string>
     <string name="cd_reset_zoom">Reset Zoom</string>
     <string name="result_overlap_merged">-%1$dpx overlap merged</string>
+    <string name="result_badge_direct_join">Direct Join (No Trim)</string>
     <string name="btn_share">Share</string>
     <string name="btn_save_to_gallery">Save to Gallery</string>
     <string name="cd_stitched_long_screenshot">Stitched long screenshot</string>

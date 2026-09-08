@@ -228,6 +228,14 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   fun stitchNow() {
+    stitchInternal(removeOverlap = true)
+  }
+
+  fun stitchDirectly() {
+    stitchInternal(removeOverlap = false)
+  }
+
+  private fun stitchInternal(removeOverlap: Boolean) {
     val context = getApplication<Application>()
     val currentImages = _images.value
     if (currentImages.size < 2) {
@@ -238,16 +246,22 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       _uiState.value = StitchUiState.Stitching(
         progress = 0f,
-        statusMessage = context.getString(R.string.progress_starting)
+        statusMessage = context.getString(R.string.progress_starting),
+        isDirect = !removeOverlap
       )
 
       val result = StitchEngine.stitchImages(
         context = context,
         images = currentImages,
-        seams = _seams.value,
-        settings = _settings.value
+        seams = if (removeOverlap) _seams.value else emptyList(),
+        settings = _settings.value,
+        removeOverlap = removeOverlap
       ) { progress, message ->
-        _uiState.value = StitchUiState.Stitching(progress = progress, statusMessage = message)
+        _uiState.value = StitchUiState.Stitching(
+          progress = progress,
+          statusMessage = message,
+          isDirect = !removeOverlap
+        )
       }
 
       result.onSuccess { stitchResult ->
