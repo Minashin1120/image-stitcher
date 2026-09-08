@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.R
+import com.example.model.StitchOrientation
 import com.example.model.StitchResult
 import java.io.File
 import java.io.FileInputStream
@@ -218,6 +221,32 @@ fun ResultView(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
               )
+            }
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+              ) {
+                Icon(
+                  if (result.orientation == StitchOrientation.HORIZONTAL) Icons.Default.SwapHoriz else Icons.Default.SwapVert,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = if (result.orientation == StitchOrientation.HORIZONTAL) {
+                    stringResource(R.string.result_badge_horizontal)
+                  } else {
+                    stringResource(R.string.result_badge_vertical)
+                  },
+                  style = MaterialTheme.typography.labelMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
             }
             if (result.isDirectJoin) {
               Surface(

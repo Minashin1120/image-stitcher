@@ -37,6 +37,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +48,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,6 +83,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.model.SeamConfig
+import com.example.model.StitchOrientation
 import com.example.model.StitchUiState
 import com.example.service.ScreenCaptureStateHolder
 import com.example.ui.components.CaptureActiveBanner
@@ -414,7 +418,11 @@ fun MainScreen(
               Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(20.dp))
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                stringResource(R.string.btn_stitch_now, images.size),
+                if (settings.orientation == StitchOrientation.HORIZONTAL) {
+                  stringResource(R.string.btn_stitch_now_horizontal, images.size)
+                } else {
+                  stringResource(R.string.btn_stitch_now, images.size)
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
               )
@@ -530,6 +538,48 @@ fun MainScreen(
               }
             }
 
+            // Quick Direction Switcher: Vertical vs Horizontal
+            item {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                FilterChip(
+                  selected = settings.orientation == StitchOrientation.VERTICAL,
+                  onClick = { viewModel.setOrientation(StitchOrientation.VERTICAL) },
+                  label = { Text(stringResource(R.string.orientation_vertical)) },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Default.SwapVert,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("chip_main_vertical")
+                )
+                FilterChip(
+                  selected = settings.orientation == StitchOrientation.HORIZONTAL,
+                  onClick = { viewModel.setOrientation(StitchOrientation.HORIZONTAL) },
+                  label = { Text(stringResource(R.string.orientation_horizontal)) },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Default.SwapHoriz,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("chip_main_horizontal")
+                )
+              }
+            }
+
             itemsIndexed(images, key = { _, item -> item.id }) { index, item ->
               ImageItemCard(
                 index = index,
@@ -547,6 +597,7 @@ fun MainScreen(
                 SeamBadge(
                   index = index,
                   seam = seam,
+                  orientation = settings.orientation,
                   onOpenFineTune = { activeFineTunePairIndex = index }
                 )
               }
@@ -689,6 +740,7 @@ fun MainScreen(
         topImage = topImg,
         bottomImage = bottomImg,
         seam = seam,
+        orientation = settings.orientation,
         onDismiss = { activeFineTunePairIndex = null },
         onSaveSeam = { updated ->
           viewModel.updateSeam(pairIdx, updated)

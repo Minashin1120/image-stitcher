@@ -255,5 +255,50 @@ class ExampleRobolectricTest {
     assertEquals(width, stitchResult.width)
     assertEquals(height1 + height2, stitchResult.height)
   }
+
+  @Test
+  fun `stitchImages with HORIZONTAL orientation stitches images side by side`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val width1 = 250
+    val width2 = 350
+    val height = 400
+
+    val bmp1 = Bitmap.createBitmap(width1, height, Bitmap.Config.ARGB_8888)
+    val bmp2 = Bitmap.createBitmap(width2, height, Bitmap.Config.ARGB_8888)
+
+    val file1 = java.io.File(context.cacheDir, "test_h_stitch_1.png")
+    val file2 = java.io.File(context.cacheDir, "test_h_stitch_2.png")
+    java.io.FileOutputStream(file1).use { bmp1.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    java.io.FileOutputStream(file2).use { bmp2.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+    val item1 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file1),
+      name = "h_img1.png",
+      width = width1,
+      height = height,
+      fileSizeBytes = file1.length()
+    )
+    val item2 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file2),
+      name = "h_img2.png",
+      width = width2,
+      height = height,
+      fileSizeBytes = file2.length()
+    )
+
+    val result = StitchEngine.stitchImages(
+      context = context,
+      images = listOf(item1, item2),
+      seams = emptyList(),
+      settings = StitchGlobalSettings(orientation = com.example.model.StitchOrientation.HORIZONTAL),
+      removeOverlap = false
+    ) { _, _ -> }
+
+    assertTrue("Horizontal stitch should succeed", result.isSuccess)
+    val stitchResult = result.getOrThrow()
+    assertEquals(com.example.model.StitchOrientation.HORIZONTAL, stitchResult.orientation)
+    assertEquals(width1 + width2, stitchResult.width)
+    assertEquals(height, stitchResult.height)
+  }
 }
 

@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,6 +64,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.model.OutputFormat
 import com.example.model.StitchGlobalSettings
+import com.example.model.StitchOrientation
 import com.example.util.BatteryOptimizationUtil
 import kotlin.math.roundToInt
 
@@ -117,6 +120,82 @@ fun SettingsBottomSheet(
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold
         )
+      }
+
+      // Stitch Direction / Orientation Card
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(16.dp)
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+              if (settings.orientation == StitchOrientation.HORIZONTAL) Icons.Default.SwapHoriz else Icons.Default.SwapVert,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = stringResource(R.string.settings_stitch_orientation_title),
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = stringResource(R.string.settings_stitch_orientation_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.height(12.dp))
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            FilterChip(
+              selected = settings.orientation == StitchOrientation.VERTICAL,
+              onClick = { onUpdateSettings(settings.copy(orientation = StitchOrientation.VERTICAL)) },
+              label = { Text(stringResource(R.string.orientation_vertical)) },
+              leadingIcon = {
+                Icon(
+                  Icons.Default.SwapVert,
+                  contentDescription = null,
+                  modifier = Modifier.size(18.dp)
+                )
+              },
+              modifier = Modifier
+                .weight(1f)
+                .testTag("chip_orientation_vertical")
+            )
+            FilterChip(
+              selected = settings.orientation == StitchOrientation.HORIZONTAL,
+              onClick = { onUpdateSettings(settings.copy(orientation = StitchOrientation.HORIZONTAL)) },
+              label = { Text(stringResource(R.string.orientation_horizontal)) },
+              leadingIcon = {
+                Icon(
+                  Icons.Default.SwapHoriz,
+                  contentDescription = null,
+                  modifier = Modifier.size(18.dp)
+                )
+              },
+              modifier = Modifier
+                .weight(1f)
+                .testTag("chip_orientation_horizontal")
+            )
+          }
+        }
       }
 
       // Auto-Detect Overlap Card

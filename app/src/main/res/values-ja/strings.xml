@@ -215,4 +215,16 @@
     <string name="battery_dialog_message">連続画面キャプチャや自動スクロール、常駐クイック起動通知がバックグラウンドで中断されずに安定して動作するために、バッテリー最適化の除外を推奨しています。\n\n今すぐ除外設定を行いますか？</string>
     <string name="btn_battery_exempt_now">除外する</string>
     <string name="btn_battery_exempt_later">あとで</string>
+    <string name="settings_stitch_orientation_title">結合方向</string>
+    <string name="settings_stitch_orientation_desc">画像を縦方向に結合するか、横方向に結合するかを選択します</string>
+    <string name="orientation_vertical">縦に結合</string>
+    <string name="orientation_horizontal">横に結合</string>
+    <string name="orientation_vertical_short">縦結合</string>
+    <string name="orientation_horizontal_short">横結合</string>
+    <string name="btn_stitch_now_horizontal">%1$d枚の画像を横に結合</string>
+    <string name="fine_tune_left_slice">左の画像</string>
+    <string name="fine_tune_right_slice">右の画像</string>
+    <string name="result_badge_vertical">縦結合</string>
+    <string name="result_badge_horizontal">横結合</string>
+    <string name="seam_horizontal_overlap_px">横の重なり: %1$d px</string>
 </resources>

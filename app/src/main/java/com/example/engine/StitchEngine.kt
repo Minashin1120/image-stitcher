@@ -13,6 +13,7 @@ import com.example.model.ImageItem
 import com.example.model.OutputFormat
 import com.example.model.SeamConfig
 import com.example.model.StitchGlobalSettings
+import com.example.model.StitchOrientation
 import com.example.model.StitchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -139,6 +140,26 @@ object StitchEngine {
       return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
     }
 
+    if (settings.orientation == StitchOrientation.HORIZONTAL) {
+      val matchHeight = 360
+      val leftThumb = topItem.thumbnail ?: loadThumbnail(context, topItem.uri, matchHeight)
+      val rightThumb = bottomItem.thumbnail ?: loadThumbnail(context, bottomItem.uri, matchHeight)
+
+      if (leftThumb == null || rightThumb == null) {
+        return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
+      }
+
+      return@withContext detectHorizontalOverlapInternal(
+        leftBitmap = leftThumb,
+        rightBitmap = rightThumb,
+        settings = settings,
+        origWidth1 = topItem.width,
+        origHeight1 = topItem.height,
+        origWidth2 = bottomItem.width,
+        origHeight2 = bottomItem.height
+      )
+    }
+
     val matchWidth = 360
     val topThumb = topItem.thumbnail ?: loadThumbnail(context, topItem.uri, matchWidth)
     val bottomThumb = bottomItem.thumbnail ?: loadThumbnail(context, bottomItem.uri, matchWidth)
@@ -170,6 +191,18 @@ object StitchEngine {
       return@withContext SeamConfig(autoOverlap = 0, confidence = 0f, isAutoDetected = true)
     }
 
+    if (settings.orientation == StitchOrientation.HORIZONTAL) {
+      return@withContext detectHorizontalOverlapInternal(
+        leftBitmap = topBitmap,
+        rightBitmap = bottomBitmap,
+        settings = settings,
+        origWidth1 = topBitmap.width,
+        origHeight1 = topBitmap.height,
+        origWidth2 = bottomBitmap.width,
+        origHeight2 = bottomBitmap.height
+      )
+    }
+
     detectOverlapInternal(
       topBitmap = topBitmap,
       bottomBitmap = bottomBitmap,
@@ -178,6 +211,107 @@ object StitchEngine {
       origHeight1 = topBitmap.height,
       origWidth2 = bottomBitmap.width,
       origHeight2 = bottomBitmap.height
+    )
+  }
+
+  private fun detectHorizontalOverlapInternal(
+    leftBitmap: Bitmap,
+    rightBitmap: Bitmap,
+    settings: StitchGlobalSettings,
+    origWidth1: Int,
+    origHeight1: Int,
+    origWidth2: Int,
+    origHeight2: Int
+  ): SeamConfig {
+    val matchHeight = 360
+    val scale1 = matchHeight.toFloat() / leftBitmap.height
+    val scale2 = matchHeight.toFloat() / rightBitmap.height
+
+    val w1 = (leftBitmap.width * scale1).roundToInt().coerceAtLeast(20)
+    val w2 = (rightBitmap.width * scale2).roundToInt().coerceAtLeast(20)
+
+    val scaled1 = if (leftBitmap.height == matchHeight && leftBitmap.width == w1) {
+      leftBitmap
+    } else {
+      Bitmap.createScaledBitmap(leftBitmap, w1, matchHeight, true)
+    }
+    val scaled2 = if (rightBitmap.height == matchHeight && rightBitmap.width == w2) {
+      rightBitmap
+    } else {
+      Bitmap.createScaledBitmap(rightBitmap, w2, matchHeight, true)
+    }
+
+    val gray1 = extractGrayscaleMatrix(scaled1)
+    val gray2 = extractGrayscaleMatrix(scaled2)
+
+    val scaleRatioX1 = origWidth1.toFloat() / w1
+
+    val minShift = max(4, (min(w1, w2) * 0.03f).roundToInt())
+    val maxShift = (w1 - 4).coerceAtLeast(minShift + 1)
+
+    var bestShiftScaled = 0
+    var bestScore = Double.MAX_VALUE
+    var bestAvgDiff = Double.MAX_VALUE
+
+    for (shift in minShift..maxShift) {
+      val x2Start = 0
+      val x2End = min(w2, w1 - shift)
+      val overlapCols = x2End - x2Start
+
+      if (overlapCols < 14) continue
+
+      var totalDiff = 0.0
+      var varianceSum = 0.0
+      var samples = 0
+
+      val stepX = if (overlapCols > 70) 2 else 1
+      val stepY = 4
+
+      for (x2 in x2Start until x2End step stepX) {
+        val x1 = x2 + shift
+        for (y in 0 until matchHeight step stepY) {
+          val v1 = gray1[y][x1]
+          val v2 = gray2[y][x2]
+          totalDiff += abs(v1 - v2)
+          val dev = v2 - 128
+          varianceSum += dev * dev
+          samples++
+        }
+      }
+
+      if (samples > 0) {
+        val avgDiff = totalDiff / samples
+        val avgVar = varianceSum / samples
+        val score = avgDiff / (1.0 + min(avgVar / 2000.0, 3.0))
+
+        if (score < bestScore) {
+          bestScore = score
+          bestShiftScaled = shift
+          bestAvgDiff = avgDiff
+        }
+      }
+    }
+
+    if (bestShiftScaled <= 0 || bestAvgDiff > 45.0) {
+      return SeamConfig(
+        autoOverlap = 0,
+        confidence = 0f,
+        isAutoDetected = true,
+        leftTrim = 0,
+        rightTrim = 0
+      )
+    }
+
+    val overlapColumnsScaled = w1 - bestShiftScaled
+    val confidence = (1.0 - (bestAvgDiff / 45.0)).toFloat().coerceIn(0.2f, 1f)
+    val autoOverlapOrig = (overlapColumnsScaled * scaleRatioX1).roundToInt()
+
+    return SeamConfig(
+      autoOverlap = autoOverlapOrig.coerceAtLeast(0),
+      confidence = confidence,
+      isAutoDetected = true,
+      leftTrim = 0,
+      rightTrim = 0
     )
   }
 
@@ -706,6 +840,182 @@ object StitchEngine {
         bitmaps.add(bmp)
       }
 
+      if (settings.orientation == StitchOrientation.HORIZONTAL) {
+        val targetHeight = bitmaps.maxOf { it.height }
+        var totalWidth = 0
+        var totalOverlapRemoved = 0
+        val drawOperations = mutableListOf<DrawOp>()
+
+        for (i in bitmaps.indices) {
+          val bmp = bitmaps[i]
+          val cropLeft: Int
+          val cropRight: Int
+          val sliceWidth: Int
+          val renderedWidth: Int
+
+          if (!removeOverlap) {
+            cropLeft = 0
+            cropRight = 0
+            sliceWidth = bmp.width
+            renderedWidth = if (bmp.height > 0 && bmp.height != targetHeight) {
+              (sliceWidth.toFloat() * targetHeight / bmp.height).roundToInt()
+            } else {
+              sliceWidth
+            }
+          } else {
+            val seamBefore = if (i > 0) seams.getOrNull(i - 1) ?: SeamConfig() else null
+            val seamAfter = if (i < bitmaps.size - 1) seams.getOrNull(i) ?: SeamConfig() else null
+
+            cropLeft = if (i == 0) {
+              0
+            } else {
+              val overlap = seamBefore?.totalOverlap ?: 0
+              val leftTrim = seamBefore?.leftTrim ?: 0
+              (overlap + leftTrim).coerceIn(0, bmp.width - 1)
+            }
+
+            cropRight = if (i == bitmaps.size - 1) {
+              0
+            } else {
+              val rightTrim = seamAfter?.rightTrim ?: 0
+              rightTrim.coerceIn(0, bmp.width - cropLeft - 1)
+            }
+
+            sliceWidth = (bmp.width - cropLeft - cropRight).coerceAtLeast(1)
+            renderedWidth = if (bmp.height > 0 && bmp.height != targetHeight) {
+              (sliceWidth.toFloat() * targetHeight / bmp.height).roundToInt()
+            } else {
+              sliceWidth
+            }
+
+            if (seamBefore != null) {
+              totalOverlapRemoved += seamBefore.totalOverlap
+            }
+          }
+
+          val srcRect = Rect(cropLeft, 0, cropLeft + sliceWidth, bmp.height)
+          val dstRect = Rect(totalWidth, 0, totalWidth + renderedWidth, targetHeight)
+
+          drawOperations.add(DrawOp(bitmap = bmp, srcRect = srcRect, dstRect = dstRect))
+          totalWidth += renderedWidth
+        }
+
+        onProgress(
+          0.6f,
+          context.getString(R.string.progress_composing_canvas, totalWidth, targetHeight)
+        )
+
+        val maxAllowedWidth = 32768
+        val finalOutputBitmap: Bitmap = if (totalWidth > maxAllowedWidth) {
+          val scale = maxAllowedWidth.toFloat() / totalWidth
+          val scaledWidth = maxAllowedWidth
+          val scaledHeight = (targetHeight * scale).roundToInt()
+          Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888)
+        } else {
+          Bitmap.createBitmap(totalWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        }
+
+        val canvas = Canvas(finalOutputBitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+        val isScaled = totalWidth > maxAllowedWidth
+        val globalScale = if (isScaled) maxAllowedWidth.toFloat() / totalWidth else 1f
+
+        for ((index, op) in drawOperations.withIndex()) {
+          onProgress(
+            0.6f + 0.25f * (index.toFloat() / drawOperations.size),
+            context.getString(R.string.progress_rendering_slice, index + 1)
+          )
+          val targetDst = if (isScaled) {
+            Rect(
+              (op.dstRect.left * globalScale).roundToInt(),
+              (op.dstRect.top * globalScale).roundToInt(),
+              (op.dstRect.right * globalScale).roundToInt(),
+              (op.dstRect.bottom * globalScale).roundToInt()
+            )
+          } else {
+            op.dstRect
+          }
+          canvas.drawBitmap(op.bitmap, op.srcRect, targetDst, paint)
+        }
+
+        if (removeOverlap) {
+          val blendRadius = 3
+          val blendHeight = finalOutputBitmap.height
+          val blendPixels = IntArray(blendHeight)
+          val srcPixels1 = IntArray(blendHeight)
+          val srcPixels2 = IntArray(blendHeight)
+
+          for (i in 0 until drawOperations.size - 1) {
+            val op1 = drawOperations[i]
+            val op2 = drawOperations[i + 1]
+            val seamX = if (isScaled) (op1.dstRect.right * globalScale).roundToInt() else op1.dstRect.right
+
+            for (offset in -blendRadius until blendRadius) {
+              val currentX = seamX + offset
+              if (currentX <= 0 || currentX >= finalOutputBitmap.width - 1) continue
+
+              val t = (offset + blendRadius + 0.5f) / (2f * blendRadius)
+              val xInBmp1 = op1.srcRect.right + offset
+              val xInBmp2 = op2.srcRect.left + offset
+
+              if (xInBmp1 in 0 until op1.bitmap.width && xInBmp2 in 0 until op2.bitmap.width) {
+                val copyH = minOf(blendHeight, op1.bitmap.height, op2.bitmap.height)
+                op1.bitmap.getPixels(srcPixels1, 0, 1, xInBmp1, 0, 1, copyH)
+                op2.bitmap.getPixels(srcPixels2, 0, 1, xInBmp2, 0, 1, copyH)
+
+                for (y in 0 until copyH) {
+                  val c1 = srcPixels1[y]
+                  val c2 = srcPixels2[y]
+
+                  val a1 = Color.alpha(c1); val r1 = Color.red(c1); val g1 = Color.green(c1); val b1 = Color.blue(c1)
+                  val a2 = Color.alpha(c2); val r2 = Color.red(c2); val g2 = Color.green(c2); val b2 = Color.blue(c2)
+
+                  val a = (a1 * (1f - t) + a2 * t).roundToInt().coerceIn(0, 255)
+                  val r = (r1 * (1f - t) + r2 * t).roundToInt().coerceIn(0, 255)
+                  val g = (g1 * (1f - t) + g2 * t).roundToInt().coerceIn(0, 255)
+                  val b = (b1 * (1f - t) + b2 * t).roundToInt().coerceIn(0, 255)
+
+                  blendPixels[y] = Color.argb(a, r, g, b)
+                }
+
+                finalOutputBitmap.setPixels(blendPixels, 0, 1, currentX, 0, 1, copyH)
+              }
+            }
+          }
+        }
+
+        onProgress(0.9f, context.getString(R.string.progress_saving_screenshot))
+
+        val outputDir = File(context.cacheDir, "stitched").apply { mkdirs() }
+        val fileName = "stitched_${System.currentTimeMillis()}.${settings.outputFormat.extension}"
+        val outputFile = File(outputDir, fileName)
+
+        FileOutputStream(outputFile).use { out ->
+          val compressFormat = when (settings.outputFormat) {
+            OutputFormat.PNG -> Bitmap.CompressFormat.PNG
+            OutputFormat.JPEG -> Bitmap.CompressFormat.JPEG
+            OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
+          }
+          finalOutputBitmap.compress(compressFormat, settings.outputQuality, out)
+        }
+
+        val result = StitchResult(
+          uri = Uri.fromFile(outputFile),
+          file = outputFile,
+          width = finalOutputBitmap.width,
+          height = finalOutputBitmap.height,
+          fileSizeBytes = outputFile.length(),
+          sourceCount = images.size,
+          totalOverlapRemoved = if (removeOverlap) totalOverlapRemoved else 0,
+          isDirectJoin = !removeOverlap,
+          orientation = StitchOrientation.HORIZONTAL
+        )
+
+        onProgress(1.0f, context.getString(R.string.progress_complete))
+        return@withContext Result.success(result)
+      }
+
       val targetWidth = bitmaps.maxOf { it.width }
 
       // Compute slice rectangles and final canvas height
@@ -895,7 +1205,8 @@ object StitchEngine {
         fileSizeBytes = outputFile.length(),
         sourceCount = images.size,
         totalOverlapRemoved = if (removeOverlap) totalOverlapRemoved else 0,
-        isDirectJoin = !removeOverlap
+        isDirectJoin = !removeOverlap,
+        orientation = StitchOrientation.VERTICAL
       )
 
       onProgress(1.0f, context.getString(R.string.progress_complete))

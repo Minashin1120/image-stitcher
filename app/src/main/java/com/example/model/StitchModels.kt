@@ -11,6 +11,11 @@ enum class OutputFormat(val extension: String, val mimeType: String) {
   WEBP("webp", "image/webp")
 }
 
+enum class StitchOrientation {
+  VERTICAL,
+  HORIZONTAL
+}
+
 data class ImageItem(
   val id: String = UUID.randomUUID().toString(),
   val uri: Uri,
@@ -27,13 +32,16 @@ data class SeamConfig(
   val confidence: Float = 0f,
   val isAutoDetected: Boolean = false,
   val topTrim: Int = 0,
-  val bottomTrim: Int = 0
+  val bottomTrim: Int = 0,
+  val leftTrim: Int = 0,
+  val rightTrim: Int = 0
 ) {
   val totalOverlap: Int
     get() = (autoOverlap + manualOffset).coerceAtLeast(0)
 }
 
 data class StitchGlobalSettings(
+  val orientation: StitchOrientation = StitchOrientation.VERTICAL,
   val autoDetectOverlap: Boolean = true,
   val removeStatusBar: Boolean = false,
   val statusBarHeightPx: Int = 80,
@@ -55,7 +63,8 @@ data class StitchResult(
   val fileSizeBytes: Long,
   val sourceCount: Int = 1,
   val totalOverlapRemoved: Int = 0,
-  val isDirectJoin: Boolean = false
+  val isDirectJoin: Boolean = false,
+  val orientation: StitchOrientation = StitchOrientation.VERTICAL
 )
 
 sealed interface StitchUiState {

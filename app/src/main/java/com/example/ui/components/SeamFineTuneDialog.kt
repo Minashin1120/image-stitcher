@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.ImageItem
 import com.example.model.SeamConfig
+import com.example.model.StitchOrientation
 import kotlin.math.roundToInt
 
 @Composable
@@ -65,6 +66,7 @@ fun SeamFineTuneDialog(
   topImage: ImageItem,
   bottomImage: ImageItem,
   seam: SeamConfig,
+  orientation: StitchOrientation = StitchOrientation.VERTICAL,
   onDismiss: () -> Unit,
   onSaveSeam: (SeamConfig) -> Unit
 ) {
@@ -138,7 +140,11 @@ fun SeamFineTuneDialog(
                 modifier = Modifier.weight(1f)
               ) {
                 Text(
-                  text = stringResource(R.string.fine_tune_top_slice),
+                  text = if (orientation == StitchOrientation.HORIZONTAL) {
+                    stringResource(R.string.fine_tune_left_slice)
+                  } else {
+                    stringResource(R.string.fine_tune_top_slice)
+                  },
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.primary,
                   fontWeight = FontWeight.SemiBold
@@ -201,7 +207,11 @@ fun SeamFineTuneDialog(
                 modifier = Modifier.weight(1f)
               ) {
                 Text(
-                  text = stringResource(R.string.fine_tune_bottom_slice),
+                  text = if (orientation == StitchOrientation.HORIZONTAL) {
+                    stringResource(R.string.fine_tune_right_slice)
+                  } else {
+                    stringResource(R.string.fine_tune_bottom_slice)
+                  },
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.secondary,
                   fontWeight = FontWeight.SemiBold

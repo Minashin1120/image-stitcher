@@ -33,12 +33,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.model.SeamConfig
+import com.example.model.StitchOrientation
 import kotlin.math.roundToInt
 
 @Composable
 fun SeamBadge(
   index: Int,
   seam: SeamConfig,
+  orientation: StitchOrientation = StitchOrientation.VERTICAL,
   onOpenFineTune: () -> Unit
 ) {
   val hasConfidence = seam.confidence >= 0.70f
@@ -85,7 +87,11 @@ fun SeamBadge(
         Column {
           Text(
             text = if (hasOverlap) {
-              stringResource(R.string.seam_overlap_px, seam.totalOverlap)
+              if (orientation == StitchOrientation.HORIZONTAL) {
+                stringResource(R.string.seam_horizontal_overlap_px, seam.totalOverlap)
+              } else {
+                stringResource(R.string.seam_overlap_px, seam.totalOverlap)
+              }
             } else {
               stringResource(R.string.seam_no_overlap)
             },

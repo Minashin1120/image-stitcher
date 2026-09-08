@@ -215,4 +215,16 @@
     <string name="battery_dialog_message">To ensure continuous screen capture, auto-scrolling, and quick launch notifications work reliably in the background without interruptions, please allow this app to ignore battery optimizations.\n\nWould you like to exempt it now?</string>
     <string name="btn_battery_exempt_now">Exempt Now</string>
     <string name="btn_battery_exempt_later">Later</string>
+    <string name="settings_stitch_orientation_title">Stitch Direction</string>
+    <string name="settings_stitch_orientation_desc">Choose whether to join images vertically (top-to-bottom) or horizontally (left-to-right)</string>
+    <string name="orientation_vertical">Vertical Stitch</string>
+    <string name="orientation_horizontal">Horizontal Stitch</string>
+    <string name="orientation_vertical_short">Vertical</string>
+    <string name="orientation_horizontal_short">Horizontal</string>
+    <string name="btn_stitch_now_horizontal">Stitch %1$d Images Horizontally</string>
+    <string name="fine_tune_left_slice">Left Image</string>
+    <string name="fine_tune_right_slice">Right Image</string>
+    <string name="result_badge_vertical">Vertical</string>
+    <string name="result_badge_horizontal">Horizontal</string>
+    <string name="seam_horizontal_overlap_px">Horizontal Overlap: %1$d px</string>
 </resources>

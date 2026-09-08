@@ -16,6 +16,7 @@ import com.example.engine.StitchEngine
 import com.example.model.ImageItem
 import com.example.model.SeamConfig
 import com.example.model.StitchGlobalSettings
+import com.example.model.StitchOrientation
 import com.example.model.StitchResult
 import com.example.model.StitchUiState
 import kotlinx.coroutines.Dispatchers
@@ -150,13 +151,20 @@ class StitchViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   fun updateSettings(newSettings: StitchGlobalSettings) {
+    val orientationChanged = _settings.value.orientation != newSettings.orientation
     _settings.value = newSettings
     com.example.service.QuickLaunchNotificationManager.updatePersistentNotification(
       getApplication(),
       newSettings.persistentNotification
     )
-    if (newSettings.autoDetectOverlap) {
+    if (newSettings.autoDetectOverlap || orientationChanged) {
       autoDetectAllSeams()
+    }
+  }
+
+  fun setOrientation(orientation: StitchOrientation) {
+    if (_settings.value.orientation != orientation) {
+      updateSettings(_settings.value.copy(orientation = orientation))
     }
   }
 
