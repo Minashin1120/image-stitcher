@@ -169,5 +169,45 @@ class ExampleRobolectricTest {
     com.example.util.BatteryOptimizationUtil.setPrompted(context, true)
     assertEquals(true, com.example.util.BatteryOptimizationUtil.hasPrompted(context))
   }
+
+  @Test
+  fun `ImageEditEngine applies moved and resized MosaicRect correctly`() = runBlocking {
+    val width = 200
+    val height = 200
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    
+    // Fill with a sharp vertical gradient/alternating colors so mosaic pixelates it
+    for (y in 0 until height) {
+      for (x in 0 until width) {
+        bmp.setPixel(x, y, if ((x + y) % 2 == 0) Color.BLACK else Color.WHITE)
+      }
+    }
+
+    // Create an initial MosaicRect at (0.1, 0.1) to (0.4, 0.4)
+    val initialMosaic = com.example.model.EditAction.MosaicRect(
+      rectRelative = androidx.compose.ui.geometry.Rect(0.1f, 0.1f, 0.4f, 0.4f),
+      pixelSizeRelative = 0.1f
+    )
+
+    // Simulate moving and resizing to (0.5, 0.5) to (0.9, 0.9)
+    val movedResizedMosaic = initialMosaic.copy(
+      rectRelative = androidx.compose.ui.geometry.Rect(0.5f, 0.5f, 0.9f, 0.9f)
+    )
+
+    val edited = com.example.engine.ImageEditEngine.applyEdits(
+      sourceBitmap = bmp,
+      actions = listOf(movedResizedMosaic),
+      cropBounds = com.example.model.CropBounds()
+    )
+
+    // The old area (0.1 to 0.4) should remain intact (sharp alternating pixels)
+    // Pixel (20, 20) was (20+20)%2 == 0 => Color.BLACK
+    assertEquals(Color.BLACK, edited.getPixel(20, 20))
+
+    // The new moved/resized area (0.5 to 0.9) -> e.g. pixel (120, 120) should now be pixelated (averaged grey)
+    val pixelInMosaic = edited.getPixel(120, 120)
+    // In ARGB, it should not be pure black or pure white because it was pixelated
+    assertTrue(pixelInMosaic != Color.BLACK && pixelInMosaic != Color.WHITE)
+  }
 }
 

@@ -103,6 +103,7 @@
     <string name="btn_delete_mosaic">Delete</string>
     <string name="cd_delete_mosaic">Delete selected mosaic</string>
     <string name="hint_mosaic_selected">Mosaic selected</string>
+    <string name="hint_mosaic_transform">Drag inside to move • Drag corners or edges to resize</string>
     <string name="label_mosaic_intensity">Mosaic Strength</string>
     <string name="mosaic_intensity_light">Light</string>
     <string name="mosaic_intensity_medium">Medium</string>

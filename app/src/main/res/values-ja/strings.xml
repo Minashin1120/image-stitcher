@@ -103,6 +103,7 @@
     <string name="btn_delete_mosaic">削除</string>
     <string name="cd_delete_mosaic">選択したモザイクを削除</string>
     <string name="hint_mosaic_selected">モザイクを選択中</string>
+    <string name="hint_mosaic_transform">枠内ドラッグで移動、四隅や端でサイズ変更できます</string>
     <string name="label_mosaic_intensity">モザイクの強さ</string>
     <string name="mosaic_intensity_light">弱（細）</string>
     <string name="mosaic_intensity_medium">中（標準）</string>

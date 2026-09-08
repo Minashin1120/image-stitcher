@@ -133,6 +133,11 @@ private enum class CropHandle {
   TOP, BOTTOM, LEFT, RIGHT, INSIDE
 }
 
+private enum class MosaicHandle {
+  TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT,
+  TOP, BOTTOM, LEFT, RIGHT, INSIDE
+}
+
 private data class PixelBounds(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
 data class MosaicIntensityOption(
@@ -170,18 +175,32 @@ fun ImageEditorScreen(
   var strokeWidthDp by remember { mutableFloatStateOf(14f) }
   var mosaicPixelSizeDp by remember { mutableFloatStateOf(24f) }
 
-  // Action history
+  // Action history and Undo/Redo stacks
   val actionHistory = remember { mutableStateListOf<EditAction>() }
-  val redoStack = remember { mutableStateListOf<EditAction>() }
+  val undoStack = remember { mutableStateListOf<List<EditAction>>() }
+  val redoStack = remember { mutableStateListOf<List<EditAction>>() }
   var cropBounds by remember { mutableStateOf(CropBounds()) }
 
-  // Selected mosaic for tap-to-delete & intensity modification
+  // Helper to record undo snapshot before mutations
+  fun recordUndoSnapshot() {
+    undoStack.add(actionHistory.toList())
+    redoStack.clear()
+  }
+
+  // Selected mosaic for tap-to-delete, move, resize & intensity modification
   var selectedMosaicId by remember { mutableStateOf<String?>(null) }
 
   // Active gesture drawing states
   var currentStrokePoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
   var currentMosaicRectStart by remember { mutableStateOf<Offset?>(null) }
   var currentMosaicRectEnd by remember { mutableStateOf<Offset?>(null) }
+
+  // Mosaic transform drag states (move and resize)
+  var activeMosaicHandle by remember { mutableStateOf<MosaicHandle?>(null) }
+  var mosaicDragStartPoint by remember { mutableStateOf<Offset?>(null) }
+  var mosaicDragStartRect by remember { mutableStateOf<Rect?>(null) }
+  var mosaicDragStartPoints by remember { mutableStateOf<List<Offset>?>(null) }
+  var mosaicDragInitialHistory by remember { mutableStateOf<List<EditAction>?>(null) }
 
   // Cropping handle drag states
   var activeCropHandle by remember { mutableStateOf<CropHandle?>(null) }
@@ -197,7 +216,7 @@ fun ImageEditorScreen(
     }
   }
 
-  val hasEdits = actionHistory.isNotEmpty() || !cropBounds.isDefault
+  val hasEdits = actionHistory.isNotEmpty() || undoStack.isNotEmpty() || !cropBounds.isDefault
 
   BackHandler(enabled = true) {
     if (showDiscardDialog) {
@@ -239,15 +258,17 @@ fun ImageEditorScreen(
         actions = {
           IconButton(
             onClick = {
-              if (actionHistory.isNotEmpty()) {
-                val last = actionHistory.removeAt(actionHistory.size - 1)
-                redoStack.add(last)
-                if (selectedMosaicId == last.id) {
+              if (undoStack.isNotEmpty()) {
+                redoStack.add(actionHistory.toList())
+                val prev = undoStack.removeAt(undoStack.size - 1)
+                actionHistory.clear()
+                actionHistory.addAll(prev)
+                if (actionHistory.none { it.id == selectedMosaicId }) {
                   selectedMosaicId = null
                 }
               }
             },
-            enabled = actionHistory.isNotEmpty(),
+            enabled = undoStack.isNotEmpty(),
             modifier = Modifier.testTag("btn_editor_undo")
           ) {
             Icon(
@@ -259,8 +280,13 @@ fun ImageEditorScreen(
           IconButton(
             onClick = {
               if (redoStack.isNotEmpty()) {
+                undoStack.add(actionHistory.toList())
                 val next = redoStack.removeAt(redoStack.size - 1)
-                actionHistory.add(next)
+                actionHistory.clear()
+                actionHistory.addAll(next)
+                if (actionHistory.none { it.id == selectedMosaicId }) {
+                  selectedMosaicId = null
+                }
               }
             },
             enabled = redoStack.isNotEmpty(),
@@ -387,12 +413,21 @@ fun ImageEditorScreen(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                       )
-                      Text(
-                        text = stringResource(R.string.hint_mosaic_selected),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                      )
+                      Column {
+                        Text(
+                          text = stringResource(R.string.hint_mosaic_selected),
+                          style = MaterialTheme.typography.bodyMedium,
+                          fontWeight = FontWeight.SemiBold,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (selectedMosaicAction is EditAction.MosaicRect) {
+                          Text(
+                            text = stringResource(R.string.hint_mosaic_transform),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                          )
+                        }
+                      }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -406,8 +441,8 @@ fun ImageEditorScreen(
                         onClick = {
                           val idx = actionHistory.indexOfFirst { it.id == selectedMosaicId }
                           if (idx != -1) {
-                            val removed = actionHistory.removeAt(idx)
-                            redoStack.add(removed)
+                            recordUndoSnapshot()
+                            actionHistory.removeAt(idx)
                           }
                           selectedMosaicId = null
                         },
@@ -438,6 +473,7 @@ fun ImageEditorScreen(
                         val act = actionHistory[idx]
                         val bmpW = (loadedBitmap?.width ?: 1000).toFloat()
                         val newRel = (newPixelSizeDp * density) / bmpW
+                        recordUndoSnapshot()
                         val updated = when (act) {
                           is EditAction.MosaicRect -> act.copy(pixelSizeRelative = newRel)
                           is EditAction.MosaicPen -> act.copy(pixelSizeRelative = newRel)
@@ -461,6 +497,7 @@ fun ImageEditorScreen(
                           if (act is EditAction.MosaicPen) {
                             val bmpW = (loadedBitmap?.width ?: 1000).toFloat()
                             val newRel = (newWidthDp * 2.0f * density) / bmpW
+                            recordUndoSnapshot()
                             actionHistory[idx] = act.copy(strokeWidthRelative = newRel)
                           }
                         }
@@ -713,15 +750,65 @@ fun ImageEditorScreen(
                       when (selectedTool) {
                         EditTool.MARKER, EditTool.HIGHLIGHTER -> {
                           selectedMosaicId = null
+                          activeMosaicHandle = null
                           currentStrokePoints = listOf(relPt)
                         }
                         EditTool.MOSAIC -> {
-                          selectedMosaicId = null
-                          if (mosaicMode == MosaicMode.PEN) {
-                            currentStrokePoints = listOf(relPt)
+                          val currentSelected = actionHistory.find { it.id == selectedMosaicId }
+                          var handleFound: MosaicHandle? = null
+                          var targetMosaic: EditAction? = null
+
+                          if (currentSelected is EditAction.MosaicRect) {
+                            handleFound = findTouchedMosaicHandle(relX, relY, currentSelected.rectRelative, w, h, density)
+                            if (handleFound != null) {
+                              targetMosaic = currentSelected
+                            }
+                          } else if (currentSelected is EditAction.MosaicPen) {
+                            val penBounds = computeActionPixelBounds(currentSelected, w, h)
+                            val rect = Rect(penBounds.left / w, penBounds.top / h, penBounds.right / w, penBounds.bottom / h)
+                            if (relX in rect.left..rect.right && relY in rect.top..rect.bottom) {
+                              handleFound = MosaicHandle.INSIDE
+                              targetMosaic = currentSelected
+                            }
+                          }
+
+                          // If not touching currently selected mosaic, check if touching another mosaic
+                          if (handleFound == null) {
+                            val hitOther = findMosaicAt(relX, relY, actionHistory, w, h)
+                            if (hitOther != null) {
+                              targetMosaic = hitOther
+                              selectedMosaicId = hitOther.id
+                              if (hitOther is EditAction.MosaicRect) {
+                                handleFound = findTouchedMosaicHandle(relX, relY, hitOther.rectRelative, w, h, density) ?: MosaicHandle.INSIDE
+                              } else if (hitOther is EditAction.MosaicPen) {
+                                handleFound = MosaicHandle.INSIDE
+                              }
+                            }
+                          }
+
+                          if (targetMosaic != null && handleFound != null) {
+                            selectedMosaicId = targetMosaic.id
+                            activeMosaicHandle = handleFound
+                            mosaicDragStartPoint = relPt
+                            mosaicDragInitialHistory = actionHistory.toList()
+                            when (targetMosaic) {
+                              is EditAction.MosaicRect -> {
+                                mosaicDragStartRect = targetMosaic.rectRelative
+                              }
+                              is EditAction.MosaicPen -> {
+                                mosaicDragStartPoints = targetMosaic.points
+                              }
+                              else -> {}
+                            }
                           } else {
-                            currentMosaicRectStart = relPt
-                            currentMosaicRectEnd = relPt
+                            selectedMosaicId = null
+                            activeMosaicHandle = null
+                            if (mosaicMode == MosaicMode.PEN) {
+                              currentStrokePoints = listOf(relPt)
+                            } else {
+                              currentMosaicRectStart = relPt
+                              currentMosaicRectEnd = relPt
+                            }
                           }
                         }
                         EditTool.CROP -> {}
@@ -740,10 +827,41 @@ fun ImageEditorScreen(
                           currentStrokePoints = currentStrokePoints + relPt
                         }
                         EditTool.MOSAIC -> {
-                          if (mosaicMode == MosaicMode.PEN) {
-                            currentStrokePoints = currentStrokePoints + relPt
+                          val handle = activeMosaicHandle
+                          val startPt = mosaicDragStartPoint
+                          if (handle != null && startPt != null && selectedMosaicId != null) {
+                            val idx = actionHistory.indexOfFirst { it.id == selectedMosaicId }
+                            if (idx != -1) {
+                              val target = actionHistory[idx]
+                              if (target is EditAction.MosaicRect && mosaicDragStartRect != null) {
+                                val newRect = updateMosaicRectBounds(
+                                  startRect = mosaicDragStartRect!!,
+                                  handle = handle,
+                                  startPoint = startPt,
+                                  currentPoint = relPt,
+                                  canvasWidth = w,
+                                  canvasHeight = h,
+                                  density = density
+                                )
+                                actionHistory[idx] = target.copy(rectRelative = newRect)
+                              } else if (target is EditAction.MosaicPen && mosaicDragStartPoints != null) {
+                                val deltaX = relPt.x - startPt.x
+                                val deltaY = relPt.y - startPt.y
+                                val newPoints = mosaicDragStartPoints!!.map { pt ->
+                                  Offset(
+                                    (pt.x + deltaX).coerceIn(0f, 1f),
+                                    (pt.y + deltaY).coerceIn(0f, 1f)
+                                  )
+                                }
+                                actionHistory[idx] = target.copy(points = newPoints)
+                              }
+                            }
                           } else {
-                            currentMosaicRectEnd = relPt
+                            if (mosaicMode == MosaicMode.PEN) {
+                              currentStrokePoints = currentStrokePoints + relPt
+                            } else {
+                              currentMosaicRectEnd = relPt
+                            }
                           }
                         }
                         EditTool.CROP -> {}
@@ -753,44 +871,60 @@ fun ImageEditorScreen(
                       when (selectedTool) {
                         EditTool.MARKER -> {
                           if (currentStrokePoints.size >= 2) {
+                            recordUndoSnapshot()
                             val action = EditAction.MarkerStroke(
                               points = currentStrokePoints,
                               color = selectedColor,
                               strokeWidthRelative = (strokeWidthDp * density) / renderW
                             )
                             actionHistory.add(action)
-                            redoStack.clear()
                           }
                           currentStrokePoints = emptyList()
                         }
                         EditTool.HIGHLIGHTER -> {
                           if (currentStrokePoints.size >= 2) {
+                            recordUndoSnapshot()
                             val action = EditAction.HighlighterStroke(
                               points = currentStrokePoints,
                               color = selectedHighlighterColor,
                               strokeWidthRelative = (strokeWidthDp * 1.6f * density) / renderW
                             )
                             actionHistory.add(action)
-                            redoStack.clear()
                           }
                           currentStrokePoints = emptyList()
                         }
                         EditTool.MOSAIC -> {
-                          if (mosaicMode == MosaicMode.PEN) {
+                          if (activeMosaicHandle != null) {
+                            val initHistory = mosaicDragInitialHistory
+                            if (initHistory != null) {
+                              val currentHistory = actionHistory.toList()
+                              if (initHistory != currentHistory) {
+                                undoStack.add(initHistory)
+                                redoStack.clear()
+                              }
+                            }
+                            activeMosaicHandle = null
+                            mosaicDragStartPoint = null
+                            mosaicDragStartRect = null
+                            mosaicDragStartPoints = null
+                            mosaicDragInitialHistory = null
+                          } else if (mosaicMode == MosaicMode.PEN) {
                             if (currentStrokePoints.size >= 2) {
+                              recordUndoSnapshot()
                               val action = EditAction.MosaicPen(
                                 points = currentStrokePoints,
                                 strokeWidthRelative = (strokeWidthDp * 2.0f * density) / renderW,
                                 pixelSizeRelative = (mosaicPixelSizeDp * density) / renderW
                               )
                               actionHistory.add(action)
-                              redoStack.clear()
+                              selectedMosaicId = action.id
                             }
                             currentStrokePoints = emptyList()
                           } else {
                             val s = currentMosaicRectStart
                             val e = currentMosaicRectEnd
                             if (s != null && e != null && abs(s.x - e.x) > 0.01f && abs(s.y - e.y) > 0.01f) {
+                              recordUndoSnapshot()
                               val l = min(s.x, e.x)
                               val t = min(s.y, e.y)
                               val r = max(s.x, e.x)
@@ -800,7 +934,7 @@ fun ImageEditorScreen(
                                 pixelSizeRelative = (mosaicPixelSizeDp * density) / renderW
                               )
                               actionHistory.add(action)
-                              redoStack.clear()
+                              selectedMosaicId = action.id
                             }
                             currentMosaicRectStart = null
                             currentMosaicRectEnd = null
@@ -810,6 +944,18 @@ fun ImageEditorScreen(
                       }
                     },
                     onDragCancel = {
+                      if (activeMosaicHandle != null) {
+                        val initHistory = mosaicDragInitialHistory
+                        if (initHistory != null) {
+                          actionHistory.clear()
+                          actionHistory.addAll(initHistory)
+                        }
+                        activeMosaicHandle = null
+                        mosaicDragStartPoint = null
+                        mosaicDragStartRect = null
+                        mosaicDragStartPoints = null
+                        mosaicDragInitialHistory = null
+                      }
                       currentStrokePoints = emptyList()
                       currentMosaicRectStart = null
                       currentMosaicRectEnd = null
@@ -885,7 +1031,7 @@ fun ImageEditorScreen(
 
             // Floating Delete button positioned directly above selected mosaic
             val selectedAction = actionHistory.find { it.id == selectedMosaicId }
-            if (selectedAction != null && selectedTool == EditTool.MOSAIC) {
+            if (selectedAction != null && selectedTool == EditTool.MOSAIC && activeMosaicHandle == null) {
               val bounds = computeActionPixelBounds(selectedAction, renderW, renderH)
               val centerX = ((bounds.left + bounds.right) / 2f)
               val pillY = if (bounds.top > 54f * density) {
@@ -911,8 +1057,8 @@ fun ImageEditorScreen(
                     .clickable {
                       val idx = actionHistory.indexOfFirst { it.id == selectedMosaicId }
                       if (idx != -1) {
-                        val removed = actionHistory.removeAt(idx)
-                        redoStack.add(removed)
+                        recordUndoSnapshot()
+                        actionHistory.removeAt(idx)
                       }
                       selectedMosaicId = null
                     }
@@ -1055,16 +1201,20 @@ private fun DrawScope.drawSelectedMosaicHighlight(
   val rect = Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
   if (rect.width <= 0 || rect.height <= 0) return
 
+  val accentColor = Color(0xFFFF3D00)
+  val handleBorderColor = Color(0xFFFF3D00)
+  val handleFillColor = Color.White
+
   // Highlight fill
   drawRect(
-    color = Color(0x33FF3D00),
+    color = Color(0x28FF3D00),
     topLeft = rect.topLeft,
     size = rect.size
   )
 
   // Animated-style dashed red-orange selection border
   drawRect(
-    color = Color(0xFFFF3D00),
+    color = accentColor,
     topLeft = rect.topLeft,
     size = rect.size,
     style = Stroke(
@@ -1073,26 +1223,225 @@ private fun DrawScope.drawSelectedMosaicHighlight(
     )
   )
 
-  // 4 Corner brackets
-  val cornerLen = min(16f * density, min(rect.width, rect.height) / 2.5f)
-  val cornerThick = 3.5f * density
-  val cornerColor = Color(0xFFFF3D00)
+  if (action is EditAction.MosaicRect) {
+    // For Rectangle mosaic: show 4 corners, 4 edge handles, and center move crosshair
+    val cornerRadius = 9f * density
+    val cornerShadowRadius = cornerRadius + 2f * density
 
-  // Top-Left
-  drawLine(cornerColor, rect.topLeft, Offset(rect.left + cornerLen, rect.top), cornerThick)
-  drawLine(cornerColor, rect.topLeft, Offset(rect.left, rect.top + cornerLen), cornerThick)
+    fun drawHandleCircle(center: Offset) {
+      drawCircle(Color(0x55000000), cornerShadowRadius, center)
+      drawCircle(handleFillColor, cornerRadius, center)
+      drawCircle(handleBorderColor, cornerRadius, center, style = Stroke(width = 2.5f * density))
+      drawCircle(accentColor, 3f * density, center)
+    }
 
-  // Top-Right
-  drawLine(cornerColor, rect.topRight, Offset(rect.right - cornerLen, rect.top), cornerThick)
-  drawLine(cornerColor, rect.topRight, Offset(rect.right, rect.top + cornerLen), cornerThick)
+    // 4 Corner circle handles
+    drawHandleCircle(rect.topLeft)
+    drawHandleCircle(rect.topRight)
+    drawHandleCircle(rect.bottomLeft)
+    drawHandleCircle(rect.bottomRight)
 
-  // Bottom-Left
-  drawLine(cornerColor, rect.bottomLeft, Offset(rect.left + cornerLen, rect.bottom), cornerThick)
-  drawLine(cornerColor, rect.bottomLeft, Offset(rect.left, rect.bottom - cornerLen), cornerThick)
+    // 4 Edge bar handles
+    val edgeBarLen = 18f * density
+    val edgeBarThick = 5f * density
+    val edgeShadowThick = edgeBarThick + 3f * density
+    fun drawEdgeHandle(center: Offset, isHorizontal: Boolean) {
+      val start = if (isHorizontal) Offset(center.x - edgeBarLen / 2f, center.y) else Offset(center.x, center.y - edgeBarLen / 2f)
+      val end = if (isHorizontal) Offset(center.x + edgeBarLen / 2f, center.y) else Offset(center.x, center.y + edgeBarLen / 2f)
+      drawLine(Color(0x55000000), start, end, edgeShadowThick, cap = StrokeCap.Round)
+      drawLine(handleFillColor, start, end, edgeBarThick, cap = StrokeCap.Round)
+      drawLine(handleBorderColor, start, end, edgeBarThick - 2f * density, cap = StrokeCap.Round)
+    }
 
-  // Bottom-Right
-  drawLine(cornerColor, rect.bottomRight, Offset(rect.right - cornerLen, rect.bottom), cornerThick)
-  drawLine(cornerColor, rect.bottomRight, Offset(rect.right, rect.bottom - cornerLen), cornerThick)
+    val midX = (rect.left + rect.right) / 2f
+    val midY = (rect.top + rect.bottom) / 2f
+
+    if (rect.width > 50f * density) {
+      drawEdgeHandle(Offset(midX, rect.top), isHorizontal = true)
+      drawEdgeHandle(Offset(midX, rect.bottom), isHorizontal = true)
+    }
+    if (rect.height > 50f * density) {
+      drawEdgeHandle(Offset(rect.left, midY), isHorizontal = false)
+      drawEdgeHandle(Offset(rect.right, midY), isHorizontal = false)
+    }
+
+    // If big enough, draw subtle 4-way move crosshair icon in the center
+    if (rect.width > 60f * density && rect.height > 60f * density) {
+      val crossArm = 10f * density
+      val crossThick = 2.5f * density
+      val crossColor = Color(0xDDFFFFFF)
+      val crossShadow = Color(0x66000000)
+      drawLine(crossShadow, Offset(midX - crossArm, midY), Offset(midX + crossArm, midY), crossThick + 2f * density, cap = StrokeCap.Round)
+      drawLine(crossShadow, Offset(midX, midY - crossArm), Offset(midX, midY + crossArm), crossThick + 2f * density, cap = StrokeCap.Round)
+      drawLine(crossColor, Offset(midX - crossArm, midY), Offset(midX + crossArm, midY), crossThick, cap = StrokeCap.Round)
+      drawLine(crossColor, Offset(midX, midY - crossArm), Offset(midX, midY + crossArm), crossThick, cap = StrokeCap.Round)
+    }
+  } else {
+    // 4 Corner brackets for pen stroke mosaics
+    val cornerLen = min(16f * density, min(rect.width, rect.height) / 2.5f)
+    val cornerThick = 3.5f * density
+    val cornerColor = Color(0xFFFF3D00)
+
+    // Top-Left
+    drawLine(cornerColor, rect.topLeft, Offset(rect.left + cornerLen, rect.top), cornerThick)
+    drawLine(cornerColor, rect.topLeft, Offset(rect.left, rect.top + cornerLen), cornerThick)
+
+    // Top-Right
+    drawLine(cornerColor, rect.topRight, Offset(rect.right - cornerLen, rect.top), cornerThick)
+    drawLine(cornerColor, rect.topRight, Offset(rect.right, rect.top + cornerLen), cornerThick)
+
+    // Bottom-Left
+    drawLine(cornerColor, rect.bottomLeft, Offset(rect.left + cornerLen, rect.bottom), cornerThick)
+    drawLine(cornerColor, rect.bottomLeft, Offset(rect.left, rect.bottom - cornerLen), cornerThick)
+
+    // Bottom-Right
+    drawLine(cornerColor, rect.bottomRight, Offset(rect.right - cornerLen, rect.bottom), cornerThick)
+    drawLine(cornerColor, rect.bottomRight, Offset(rect.right, rect.bottom - cornerLen), cornerThick)
+  }
+}
+
+private fun findTouchedMosaicHandle(
+  relX: Float,
+  relY: Float,
+  rectRelative: Rect,
+  canvasWidth: Float,
+  canvasHeight: Float,
+  density: Float
+): MosaicHandle? {
+  val touchPxX = relX * canvasWidth
+  val touchPxY = relY * canvasHeight
+
+  val leftPx = rectRelative.left * canvasWidth
+  val topPx = rectRelative.top * canvasHeight
+  val rightPx = rectRelative.right * canvasWidth
+  val bottomPx = rectRelative.bottom * canvasHeight
+
+  val cornerRadiusPx = 36f * density
+  val edgeRadiusPx = 28f * density
+
+  // 1. Check 4 corners (euclidean distance in pixels)
+  val distTopLeft = hypot(touchPxX - leftPx, touchPxY - topPx)
+  val distTopRight = hypot(touchPxX - rightPx, touchPxY - topPx)
+  val distBottomLeft = hypot(touchPxX - leftPx, touchPxY - bottomPx)
+  val distBottomRight = hypot(touchPxX - rightPx, touchPxY - bottomPx)
+
+  val minCornerDist = minOf(distTopLeft, distTopRight, distBottomLeft, distBottomRight)
+  if (minCornerDist <= cornerRadiusPx) {
+    return when (minCornerDist) {
+      distTopLeft -> MosaicHandle.TOP_LEFT
+      distTopRight -> MosaicHandle.TOP_RIGHT
+      distBottomLeft -> MosaicHandle.BOTTOM_LEFT
+      else -> MosaicHandle.BOTTOM_RIGHT
+    }
+  }
+
+  // 2. Check 4 edges
+  val inXRange = touchPxX in (leftPx - edgeRadiusPx)..(rightPx + edgeRadiusPx)
+  val inYRange = touchPxY in (topPx - edgeRadiusPx)..(bottomPx + edgeRadiusPx)
+
+  val distTop = abs(touchPxY - topPx)
+  val distBottom = abs(touchPxY - bottomPx)
+  val distLeft = abs(touchPxX - leftPx)
+  val distRight = abs(touchPxX - rightPx)
+
+  if (inXRange && distTop <= edgeRadiusPx && distTop <= distBottom && distTop <= distLeft && distTop <= distRight) {
+    return MosaicHandle.TOP
+  }
+  if (inXRange && distBottom <= edgeRadiusPx && distBottom <= distLeft && distBottom <= distRight) {
+    return MosaicHandle.BOTTOM
+  }
+  if (inYRange && distLeft <= edgeRadiusPx && distLeft <= distRight) {
+    return MosaicHandle.LEFT
+  }
+  if (inYRange && distRight <= edgeRadiusPx) {
+    return MosaicHandle.RIGHT
+  }
+
+  // 3. Inside the rectangle (move)
+  if (touchPxX in leftPx..rightPx && touchPxY in topPx..bottomPx) {
+    return MosaicHandle.INSIDE
+  }
+
+  return null
+}
+
+private fun updateMosaicRectBounds(
+  startRect: Rect,
+  handle: MosaicHandle,
+  startPoint: Offset,
+  currentPoint: Offset,
+  canvasWidth: Float,
+  canvasHeight: Float,
+  density: Float
+): Rect {
+  val minSpan = 0.02f
+  val maxHandleDistX = (24f * density) / canvasWidth.coerceAtLeast(1f)
+  val maxHandleDistY = (24f * density) / canvasHeight.coerceAtLeast(1f)
+
+  return when (handle) {
+    MosaicHandle.TOP_LEFT -> {
+      val grabOffsetX = (startPoint.x - startRect.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - startRect.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, startRect.right - minSpan)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, startRect.bottom - minSpan)
+      Rect(newL, newT, startRect.right, startRect.bottom)
+    }
+    MosaicHandle.TOP_RIGHT -> {
+      val grabOffsetX = (startPoint.x - startRect.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - startRect.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(startRect.left + minSpan, 1f)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, startRect.bottom - minSpan)
+      Rect(startRect.left, newT, newR, startRect.bottom)
+    }
+    MosaicHandle.BOTTOM_LEFT -> {
+      val grabOffsetX = (startPoint.x - startRect.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - startRect.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, startRect.right - minSpan)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(startRect.top + minSpan, 1f)
+      Rect(newL, startRect.top, startRect.right, newB)
+    }
+    MosaicHandle.BOTTOM_RIGHT -> {
+      val grabOffsetX = (startPoint.x - startRect.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val grabOffsetY = (startPoint.y - startRect.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(startRect.left + minSpan, 1f)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(startRect.top + minSpan, 1f)
+      Rect(startRect.left, startRect.top, newR, newB)
+    }
+    MosaicHandle.TOP -> {
+      val grabOffsetY = (startPoint.y - startRect.top).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newT = (currentPoint.y - grabOffsetY).coerceIn(0f, startRect.bottom - minSpan)
+      Rect(startRect.left, newT, startRect.right, startRect.bottom)
+    }
+    MosaicHandle.BOTTOM -> {
+      val grabOffsetY = (startPoint.y - startRect.bottom).coerceIn(-maxHandleDistY, maxHandleDistY)
+      val newB = (currentPoint.y - grabOffsetY).coerceIn(startRect.top + minSpan, 1f)
+      Rect(startRect.left, startRect.top, startRect.right, newB)
+    }
+    MosaicHandle.LEFT -> {
+      val grabOffsetX = (startPoint.x - startRect.left).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val newL = (currentPoint.x - grabOffsetX).coerceIn(0f, startRect.right - minSpan)
+      Rect(newL, startRect.top, startRect.right, startRect.bottom)
+    }
+    MosaicHandle.RIGHT -> {
+      val grabOffsetX = (startPoint.x - startRect.right).coerceIn(-maxHandleDistX, maxHandleDistX)
+      val newR = (currentPoint.x - grabOffsetX).coerceIn(startRect.left + minSpan, 1f)
+      Rect(startRect.left, startRect.top, newR, startRect.bottom)
+    }
+    MosaicHandle.INSIDE -> {
+      val deltaX = currentPoint.x - startPoint.x
+      val deltaY = currentPoint.y - startPoint.y
+      val w = startRect.width
+      val h = startRect.height
+      val newL = (startRect.left + deltaX).coerceIn(0f, (1f - w).coerceAtLeast(0f))
+      val newT = (startRect.top + deltaY).coerceIn(0f, (1f - h).coerceAtLeast(0f))
+      Rect(
+        left = newL,
+        top = newT,
+        right = (newL + w).coerceAtMost(1f),
+        bottom = (newT + h).coerceAtMost(1f)
+      )
+    }
+  }
 }
 
 private fun computeActionPixelBounds(action: EditAction, canvasWidth: Float, canvasHeight: Float): PixelBounds {
