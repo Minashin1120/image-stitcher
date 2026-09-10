@@ -1058,14 +1058,13 @@ object StitchEngine {
           }
 
           // Crop bottom:
-          // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (strictly excludes bottom nav bar).
-          // For the last image (i == bitmaps.size - 1): automatically crop detected bottom nav bar so final image is clean.
+          // For intermediate images (i < bitmaps.size - 1): crop seamAfter.bottomTrim (strictly excludes bottom nav bar from intermediate seams).
+          // For the last image (i == bitmaps.size - 1): keep the bottom navigation bar so the final image has the authentic app layout.
+          // Only crop if the user explicitly enabled removeNavBar in settings.
           val detectedBottomNav = seams.map { it.bottomTrim }.filter { it > 0 }.maxOrNull() ?: 0
           cropBottom = if (i == bitmaps.size - 1) {
             if (settings.removeNavBar) {
               maxOf(settings.navBarHeightPx, detectedBottomNav).coerceAtMost(bmp.height / 4)
-            } else if (detectedBottomNav > 0 && settings.autoDetectOverlap) {
-              detectedBottomNav.coerceAtMost(bmp.height / 4)
             } else {
               0
             }

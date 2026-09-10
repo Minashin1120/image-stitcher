@@ -300,5 +300,97 @@ class ExampleRobolectricTest {
     assertEquals(width1 + width2, stitchResult.width)
     assertEquals(height, stitchResult.height)
   }
+
+  @Test
+  fun `stitchImages preserves bottom navigation bar on final screenshot by default`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val width = 360
+    val height = 600
+    val navBarHeight = 80
+    val scrollShift = 150
+
+    val bmp1 = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bmp2 = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+    val canvas1 = Canvas(bmp1)
+    val canvas2 = Canvas(bmp2)
+    val paint = Paint()
+
+    // Top status bar (Color.GREEN)
+    paint.color = Color.GREEN
+    canvas1.drawRect(0f, 0f, width.toFloat(), 40f, paint)
+    canvas2.drawRect(0f, 0f, width.toFloat(), 40f, paint)
+
+    // Bottom navigation bar (Color.BLUE) on both screenshots
+    paint.color = Color.BLUE
+    canvas1.drawRect(0f, (height - navBarHeight).toFloat(), width.toFloat(), height.toFloat(), paint)
+    canvas2.drawRect(0f, (height - navBarHeight).toFloat(), width.toFloat(), height.toFloat(), paint)
+
+    // Distinct scrollable content in the middle
+    for (pageRow in 0 until 1200) {
+      val rowColor = Color.rgb((pageRow * 19) % 250, (pageRow * 37) % 250, (pageRow * 61) % 250)
+      paint.color = rowColor
+      val y1 = 40 + pageRow
+      if (y1 < height - navBarHeight) {
+        canvas1.drawLine(0f, y1.toFloat(), width.toFloat(), y1.toFloat(), paint)
+      }
+      val y2 = 40 + (pageRow - scrollShift)
+      if (y2 in 40 until (height - navBarHeight)) {
+        canvas2.drawLine(0f, y2.toFloat(), width.toFloat(), y2.toFloat(), paint)
+      }
+    }
+
+    val file1 = java.io.File(context.cacheDir, "test_navbar_1.png")
+    val file2 = java.io.File(context.cacheDir, "test_navbar_2.png")
+    java.io.FileOutputStream(file1).use { bmp1.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    java.io.FileOutputStream(file2).use { bmp2.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+    val item1 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file1),
+      name = "navbar1.png",
+      width = width,
+      height = height,
+      fileSizeBytes = file1.length()
+    )
+    val item2 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file2),
+      name = "navbar2.png",
+      width = width,
+      height = height,
+      fileSizeBytes = file2.length()
+    )
+
+    val seam = StitchEngine.detectOverlap(context, item1, item2, StitchGlobalSettings(autoDetectOverlap = true))
+    assertTrue("Overlap detected", seam.confidence > 0.5f)
+
+    // Default settings: removeNavBar is false (preserves bottom nav bar on final image)
+    val resultKeep = StitchEngine.stitchImages(
+      context = context,
+      images = listOf(item1, item2),
+      seams = listOf(seam),
+      settings = StitchGlobalSettings(removeNavBar = false),
+      removeOverlap = true
+    ) { _, _ -> }
+
+    // Explicitly trimming nav bar
+    val resultTrim = StitchEngine.stitchImages(
+      context = context,
+      images = listOf(item1, item2),
+      seams = listOf(seam),
+      settings = StitchGlobalSettings(removeNavBar = true),
+      removeOverlap = true
+    ) { _, _ -> }
+
+    assertTrue("Keep stitch succeeded", resultKeep.isSuccess)
+    assertTrue("Trim stitch succeeded", resultTrim.isSuccess)
+
+    val keepHeight = resultKeep.getOrThrow().height
+    val trimHeight = resultTrim.getOrThrow().height
+
+    // When removeNavBar is false (default), bottom navigation bar on last image is retained
+    assertTrue("Kept nav bar height should be taller than trimmed nav bar height", keepHeight > trimHeight)
+    val expectedTrim = maxOf(StitchGlobalSettings().navBarHeightPx, seam.bottomTrim).coerceAtMost(height / 4)
+    assertEquals("Difference should equal the bottom navigation bar trim", expectedTrim, keepHeight - trimHeight)
+  }
 }
 

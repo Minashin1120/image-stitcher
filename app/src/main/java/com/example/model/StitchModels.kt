@@ -45,7 +45,7 @@ data class StitchGlobalSettings(
   val autoDetectOverlap: Boolean = true,
   val removeStatusBar: Boolean = false,
   val statusBarHeightPx: Int = 80,
-  val removeNavBar: Boolean = true,
+  val removeNavBar: Boolean = false,
   val navBarHeightPx: Int = 160,
   val edgeBlending: Boolean = true,
   val persistentNotification: Boolean = true,

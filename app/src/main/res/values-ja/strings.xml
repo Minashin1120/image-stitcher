@@ -59,10 +59,10 @@
     <string name="settings_auto_detect_title">重複領域の自動検出</string>
     <string name="settings_auto_detect_desc">連続するスクリーンショットの重複行を自動で検出し位置合わせします</string>
     <string name="settings_trim_status_bar_title">上部ステータスバーの除去</string>
-    <string name="settings_trim_status_bar_desc">2枚目以降からバッテリー・時計などの重複ヘッダーを除外します</string>
+    <string name="settings_trim_status_bar_desc">結合画像の最上部からステータスバー（時計・バッテリーなど）を除去します（OFFの場合は最上部に残します）</string>
     <string name="settings_status_bar_height_label">ステータスバーの高さ: %1$dpx</string>
     <string name="settings_trim_nav_bar_title">下部ナビゲーションバーの除去</string>
-    <string name="settings_trim_nav_bar_desc">末尾以外の画像からジェスチャーバー・ホームボタンを除外します</string>
+    <string name="settings_trim_nav_bar_desc">結合画像の最下部からナビゲーションバー（ホームバー・戻るボタンなど）を除去します（OFFの場合は最下部に残します）</string>
     <string name="settings_nav_bar_height_label">ナビゲーションバーの高さ: %1$dpx</string>
     <string name="settings_preserve_resolution_title">元画像の解像度を100%保持</string>
     <string name="settings_preserve_resolution_desc">横幅2,160px制限を解除し、超高解像度画像も縮小せず等倍で結合します（メモリ使用量が増加します）</string>

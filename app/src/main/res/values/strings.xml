@@ -59,10 +59,10 @@
     <string name="settings_auto_detect_title">Auto-Detect Overlaps</string>
     <string name="settings_auto_detect_desc">Automatically matches repetitive lines and aligns consecutive screenshots</string>
     <string name="settings_trim_status_bar_title">Trim Top Status Bar</string>
-    <string name="settings_trim_status_bar_desc">Excludes repetitive battery/clock header from subsequent shots</string>
+    <string name="settings_trim_status_bar_desc">Excludes status bar (clock, battery) from the top of the stitched image (when OFF, keeps it at the top)</string>
     <string name="settings_status_bar_height_label">Status Bar Height: %1$dpx</string>
     <string name="settings_trim_nav_bar_title">Trim Bottom Navigation Bar</string>
-    <string name="settings_trim_nav_bar_desc">Excludes bottom gesture pill/home buttons from leading shots</string>
+    <string name="settings_trim_nav_bar_desc">Excludes navigation bar (gesture pill, home button) from the bottom of the stitched image (when OFF, keeps it at the bottom)</string>
     <string name="settings_nav_bar_height_label">Nav Bar Height: %1$dpx</string>
     <string name="settings_preserve_resolution_title">Preserve 100% Original Resolution</string>
     <string name="settings_preserve_resolution_desc">Bypass the 2,160px width safety limit to keep ultra-high resolution screenshots completely untouched (uses more memory)</string>
