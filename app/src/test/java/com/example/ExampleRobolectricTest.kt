@@ -392,5 +392,107 @@ class ExampleRobolectricTest {
     val expectedTrim = maxOf(StitchGlobalSettings().navBarHeightPx, seam.bottomTrim).coerceAtMost(height / 4)
     assertEquals("Difference should equal the bottom navigation bar trim", expectedTrim, keepHeight - trimHeight)
   }
+
+  @Test
+  fun `stitchImages with sticky app header preserves all scrolled content without missing junction rows`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val width = 360
+    val height = 700
+    val headerHeight = 140
+    val scrollShift = 180
+
+    val bmp1 = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bmp2 = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+    val canvas1 = Canvas(bmp1)
+    val canvas2 = Canvas(bmp2)
+    val paint = Paint()
+
+    // 1. Draw static header (status bar + app bar + tabs) on both images
+    // Header pattern has distinctive bands so it's clearly a real app header
+    paint.color = Color.rgb(30, 30, 30) // Dark status bar
+    canvas1.drawRect(0f, 0f, width.toFloat(), 40f, paint)
+    canvas2.drawRect(0f, 0f, width.toFloat(), 40f, paint)
+
+    paint.color = Color.rgb(50, 50, 60) // App bar
+    canvas1.drawRect(0f, 40f, width.toFloat(), 100f, paint)
+    canvas2.drawRect(0f, 40f, width.toFloat(), 100f, paint)
+
+    paint.color = Color.rgb(70, 70, 80) // Tab bar with divider line
+    canvas1.drawRect(0f, 100f, width.toFloat(), headerHeight.toFloat(), paint)
+    canvas2.drawRect(0f, 100f, width.toFloat(), headerHeight.toFloat(), paint)
+
+    // 2. Draw continuous scrolled content where each row Y has a unique color encoding its global row index
+    // pageRow 0 is the first row right below the header in image 1.
+    for (pageRow in 0 until 1200) {
+      val r = (pageRow % 250) + 5
+      val g = ((pageRow * 3) % 250) + 5
+      val b = ((pageRow * 7) % 250) + 5
+      paint.color = Color.rgb(r, g, b)
+
+      // In Image 1: content starts at headerHeight
+      val y1 = headerHeight + pageRow
+      if (y1 < height) {
+        canvas1.drawRect(0f, y1.toFloat(), width.toFloat(), (y1 + 1f), paint)
+      }
+
+      // In Image 2: content shifted by scrollShift
+      val y2 = headerHeight + (pageRow - scrollShift)
+      if (y2 in headerHeight until height) {
+        canvas2.drawRect(0f, y2.toFloat(), width.toFloat(), (y2 + 1f), paint)
+      }
+    }
+
+    // Also draw a simulated vertical scrollbar on the right edge of image 2 (common in Android scroll views)
+    paint.color = Color.rgb(180, 180, 180)
+    canvas2.drawRect((width - 6).toFloat(), 200f, width.toFloat(), 450f, paint)
+
+    val file1 = java.io.File(context.cacheDir, "test_sticky_1.png")
+    val file2 = java.io.File(context.cacheDir, "test_sticky_2.png")
+    java.io.FileOutputStream(file1).use { bmp1.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    java.io.FileOutputStream(file2).use { bmp2.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+    val item1 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file1),
+      name = "sticky1.png",
+      width = width,
+      height = height,
+      fileSizeBytes = file1.length(),
+      thumbnail = bmp1
+    )
+    val item2 = com.example.model.ImageItem(
+      uri = android.net.Uri.fromFile(file2),
+      name = "sticky2.png",
+      width = width,
+      height = height,
+      fileSizeBytes = file2.length(),
+      thumbnail = bmp2
+    )
+
+    val seam = StitchEngine.detectOverlap(context, item1, item2, StitchGlobalSettings(autoDetectOverlap = true))
+    assertTrue("High confidence overlap detection", seam.confidence >= 0.70f)
+    // topTrim should have accurately identified the sticky header
+    assertTrue("Top trim should be at least header height: ${seam.topTrim}", seam.topTrim >= headerHeight - 10)
+
+    val stitchResult = StitchEngine.stitchImages(
+      context = context,
+      images = listOf(item1, item2),
+      seams = listOf(seam),
+      settings = StitchGlobalSettings(autoDetectOverlap = true, removeStatusBar = false),
+      removeOverlap = true
+    ) { _, _ -> }
+
+    assertTrue("Stitch should succeed", stitchResult.isSuccess)
+    val result = stitchResult.getOrThrow()
+
+    // The stitched image must contain the header (140px) + all scrolled content from image 1 and image 2
+    // Image 1 contains rows 0..560 of page content (height 700 - header 140)
+    // Image 2 is shifted by 180px, containing rows 180..740 of page content
+    // Total combined page height = header (140) + total page content (740) = 880px!
+    val expectedHeight = height + scrollShift
+    assertEquals("Stitched width must match", width, result.width)
+    assertEquals("Stitched height must be exactly height + scrollShift with zero missing rows", expectedHeight, result.height)
+    assertEquals("2 source images stitched", 2, result.sourceCount)
+  }
 }
 

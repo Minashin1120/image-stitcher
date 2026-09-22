@@ -349,11 +349,11 @@ object StitchEngine {
     val scaleRatioY2 = origHeight2.toFloat() / h2
 
     // 1. Detect static top headers (status bar + app bar identical in both images)
-    val maxHeaderCheckRows = min(h1, h2) * 35 / 100
+    val maxHeaderCheckRows = (min(h1, h2) * 0.48f).roundToInt()
     val staticTopRows = detectStaticTopRows(gray1, gray2, matchWidth, maxHeaderCheckRows)
 
     // 2. Detect static bottom navigation bar (e.g. YouTube bottom 5-tab bar, Chrome bottom bar)
-    val maxFooterCheckRows = min(h1, h2) * 32 / 100
+    val maxFooterCheckRows = (min(h1, h2) * 0.32f).roundToInt()
     val staticBottomRows = detectStaticBottomRows(gray1, gray2, matchWidth, maxFooterCheckRows)
 
     // 3. Detect transparent navigation bar with gesture pill / handle
@@ -378,7 +378,7 @@ object StitchEngine {
     // 4. Search for vertical scroll displacement `shift` where y1 = y2 + shift
     // For collapsible headers (e.g. YouTube top bar collapsing on scroll):
     // In image 1, top header can be topInset1 or larger if an app bar collapsed in image 2.
-    val minShift = max(4, (min(h1, h2) * 0.03f).roundToInt())
+    val minShift = max(4, (min(h1, h2) * 0.02f).roundToInt())
     val maxShift = (h1 - topInset1 - bottomInset1 - 4).coerceAtLeast(minShift + 1)
 
     // Candidate header start heights in image 1 (to handle collapsible headers)
@@ -394,6 +394,9 @@ object StitchEngine {
     var bestScore = Double.MAX_VALUE
     var bestHeader1 = topInset1
     var bestAvgDiff = Double.MAX_VALUE
+
+    val testStartX = (matchWidth * 0.04f).roundToInt()
+    val testEndX = (matchWidth * 0.93f).roundToInt()
 
     for (head1 in header1Candidates) {
       for (shift in minShift..maxShift) {
@@ -415,7 +418,7 @@ object StitchEngine {
           val r1 = gray1[y1]
           val r2 = gray2[y2]
 
-          for (x in 0 until matchWidth step stepX) {
+          for (x in testStartX until testEndX step stepX) {
             // Give lower weight to bottom-right floating buttons so they don't bias alignment
             if (y1 > h1 * 0.72f && x > matchWidth * 0.65f) {
               continue
@@ -458,11 +461,47 @@ object StitchEngine {
       )
     }
 
+    // Post-shift sticky header refinement:
+    // With bestShiftScaled known, verify where the static sticky header truly ends.
+    // A row y in Image 2 is part of the static header ONLY if it matches Image 1 at offset 0 (static)
+    // significantly better than it matches Image 1 at the scrolled offset (y + bestShiftScaled).
+    val maxRefineRows = minOf((h2 * 0.48f).roundToInt(), (h1 - bestShiftScaled - 4))
+    var verifiedStaticHeader = staticTopRows
+
+    for (y in staticTopRows until maxRefineRows) {
+      val r1Static = gray1[y]
+      val r2 = gray2[y]
+      val r1Shifted = gray1[y + bestShiftScaled]
+
+      var diff0 = 0
+      var diffShift = 0
+      var count = 0
+      for (x in testStartX until testEndX step 2) {
+        diff0 += abs(r1Static[x] - r2[x])
+        diffShift += abs(r1Shifted[x] - r2[x])
+        count++
+      }
+      val d0 = diff0.toDouble() / count
+      val dShift = diffShift.toDouble() / count
+
+      // A row belongs to the static header ONLY if it matches offset 0 closely
+      // AND matches offset 0 noticeably better than the shifted scrolled content.
+      if (d0 < 8.5 && dShift > d0 + 6.0) {
+        verifiedStaticHeader = y + 1
+      } else {
+        // The moment moving scrolled content is reached, the static header has ended. Stop.
+        break
+      }
+    }
+
+    val confirmedTopInset2 = maxOf(topInset2, verifiedStaticHeader, statusBarTrimScaled)
+    val confirmedTopInset1 = maxOf(bestHeader1, verifiedStaticHeader, statusBarTrimScaled)
+
     // Convert to original full-resolution space
     val fullShift = (bestShiftScaled * scaleRatioY1).roundToInt()
-    val fullTopInset1 = (bestHeader1 * scaleRatioY1).roundToInt()
+    val fullTopInset1 = (confirmedTopInset1 * scaleRatioY1).roundToInt()
     var fullBottomInset1 = (bottomInset1 * scaleRatioY1).roundToInt()
-    var fullTopInset2 = (topInset2 * scaleRatioY2).roundToInt()
+    var fullTopInset2 = (confirmedTopInset2 * scaleRatioY2).roundToInt()
     var fullBottomInset2 = (bottomInset2 * scaleRatioY2).roundToInt()
 
     if (settings.removeStatusBar) {
@@ -474,12 +513,17 @@ object StitchEngine {
     }
 
     // Calculate exact seamless cut positions:
-    // To completely eliminate leftover floating action buttons (FAB) in the bottom-right,
-    // we cut Image 1 in the upper safe zone of the overlap (far above bottom floating buttons),
-    // and let Image 2 supply the clean, unobstructed scrolled content.
-    val overlapScaled = (h1 - bottomInset1 - bestShiftScaled - topInset2).coerceAtLeast(1)
-    val scaledMinY2 = topInset2 + 2
-    val scaledMaxY2 = (topInset2 + (overlapScaled * 0.35f).roundToInt()).coerceAtMost(h2 - bottomInset2 - 1)
+    // The scrolled content in Image 2 begins strictly at confirmedTopInset2.
+    // In Image 1, scrolled content ends at (h1 - bottomInset1), which corresponds to
+    // (h1 - bottomInset1 - bestShiftScaled) in Image 2.
+    // Any seam row y2Cut MUST be at or below confirmedTopInset2 to guarantee that:
+    // 1) The sticky header is NOT duplicated from Image 2.
+    // 2) Content in Image 1 that scrolled under the header (between confirmedTopInset1 and
+    //    confirmedTopInset2 + bestShiftScaled) is 100% PRESERVED without being cut off!
+    val scaledMinY2 = confirmedTopInset2 + 1
+    val maxSafeY2 = minOf(h2 - bottomInset2 - 1, h1 - bottomInset1 - bestShiftScaled - 1)
+    val overlapScaled = (maxSafeY2 - scaledMinY2).coerceAtLeast(1)
+    val scaledMaxY2 = (scaledMinY2 + (overlapScaled * 0.40f).roundToInt()).coerceIn(scaledMinY2, maxSafeY2)
 
     val bestScaledY2Seam = findOptimalSeamRow(
       gray1 = gray1,
@@ -493,6 +537,11 @@ object StitchEngine {
     var y2Cut = (bestScaledY2Seam * scaleRatioY2).roundToInt()
     var y1Cut = y2Cut + fullShift
 
+    // Ensure y2Cut is at or below the header in image 2
+    y2Cut = y2Cut.coerceIn(fullTopInset2, origHeight2 - fullBottomInset2 - 1)
+    y1Cut = y2Cut + fullShift
+
+    // Ensure y1Cut doesn't cut into bottom nav bar or beyond image 1
     y1Cut = y1Cut.coerceIn(fullTopInset1 + 1, origHeight1 - fullBottomInset1)
     y2Cut = (y1Cut - fullShift).coerceIn(fullTopInset2, origHeight2 - 1)
 
@@ -539,6 +588,8 @@ object StitchEngine {
     var bestY = startY
     var bestRowDiff = Double.MAX_VALUE
     val sampleStep = 4
+    val startX = (width * 0.04f).roundToInt()
+    val endX = (width * 0.93f).roundToInt()
 
     for (y2 in startY..endY) {
       val y1 = y2 + shift
@@ -550,7 +601,7 @@ object StitchEngine {
       var edgeSum = 0
       var samples = 0
 
-      for (x in 0 until width step sampleStep) {
+      for (x in startX until endX step sampleStep) {
         val v1 = r1[x]
         val v2 = r2[x]
         diffSum += abs(v1 - v2)
@@ -588,37 +639,42 @@ object StitchEngine {
   ): Int {
     val h1 = gray1.size
     val h2 = gray2.size
-    val maxCheck = minOf(maxRows, h1 * 35 / 100, h2 * 35 / 100)
+    val maxCheck = minOf(maxRows, (h1 * 0.48f).roundToInt(), (h2 * 0.48f).roundToInt())
     if (maxCheck <= 0) return 0
 
     val rowDiffs = DoubleArray(maxCheck)
-    val count = width / 2
+    val startX = (width * 0.04f).roundToInt()
+    val endX = (width * 0.93f).roundToInt()
+    val count = (endX - startX) / 2
+    if (count <= 0) return 0
 
     for (y in 0 until maxCheck) {
       val r1 = gray1[y]
       val r2 = gray2[y]
       var diffSum = 0
-      for (x in 0 until width step 2) {
+      for (x in startX until endX step 2) {
         diffSum += abs(r1[x] - r2[x])
       }
       rowDiffs[y] = diffSum.toDouble() / count
     }
 
     var staticBoundary = 0
-    var consecutiveStatic = 0
+    var nonStaticCountInStatusBar = 0
 
     for (y in 0 until maxCheck) {
       val diff = rowDiffs[y]
       if (diff < 9.0) {
-        consecutiveStatic++
         staticBoundary = y + 1
       } else {
-        if (consecutiveStatic >= 8 && diff > 14.0) {
-          break
+        // In status bar region (top 15 rows), tolerate small 1-2 row blips (clock / battery / notification)
+        if (y < 15 && nonStaticCountInStatusBar < 2 && diff < 18.0) {
+          nonStaticCountInStatusBar++
+          staticBoundary = y + 1
+          continue
         }
-        if (y > 8 && y - staticBoundary >= 4) {
-          break
-        }
+        // As soon as a non-static row is encountered outside the status bar,
+        // we have reached scrolled content! Stop immediately!
+        break
       }
     }
 
@@ -642,11 +698,14 @@ object StitchEngine {
   ): Int {
     val h1 = gray1.size
     val h2 = gray2.size
-    val maxCheck = minOf(maxRows, h1 * 32 / 100, h2 * 32 / 100)
+    val maxCheck = minOf(maxRows, (h1 * 0.35f).roundToInt(), (h2 * 0.35f).roundToInt())
     if (maxCheck <= 0) return 0
 
     val rowDiffs = DoubleArray(maxCheck)
-    val count = width / 2
+    val startX = (width * 0.04f).roundToInt()
+    val endX = (width * 0.93f).roundToInt()
+    val count = (endX - startX) / 2
+    if (count <= 0) return 0
 
     for (i in 0 until maxCheck) {
       val y1 = h1 - 1 - i
@@ -656,7 +715,7 @@ object StitchEngine {
       val r1 = gray1[y1]
       val r2 = gray2[y2]
       var diffSum = 0
-      for (x in 0 until width step 2) {
+      for (x in startX until endX step 2) {
         diffSum += abs(r1[x] - r2[x])
       }
       rowDiffs[i] = diffSum.toDouble() / count
@@ -664,23 +723,18 @@ object StitchEngine {
 
     // Step 1: Search for contiguous static blocks (tab bar icons + background)
     var staticBoundary = 0
-    var consecutiveStatic = 0
 
     for (i in 0 until maxCheck) {
       val diff = rowDiffs[i]
       if (diff < 9.5) {
-        consecutiveStatic++
         staticBoundary = i + 1
       } else {
-        // If we already detected a substantial bottom bar (>= 8 rows / ~25dp)
-        // and hit moving scroll content (diff >= 14.0), stop search.
-        if (consecutiveStatic >= 8 && diff > 14.0) {
-          break
+        // Tolerates faint transparent gesture bar at the very bottom
+        if (i < 4 && diff < 16.0) {
+          staticBoundary = i + 1
+          continue
         }
-        // If moving content continues for 4+ rows after the bottom area, stop.
-        if (i > 8 && (i - staticBoundary) >= 4) {
-          break
-        }
+        break
       }
     }
 
@@ -1046,10 +1100,9 @@ object StitchEngine {
           // Crop top:
           // For image 0: remove status bar if enabled or if auto-detected.
           // For image i > 0: crop seamBefore.topTrim + seamBefore.totalOverlap!
-          val detectedTopTrim = seams.map { it.topTrim }.filter { it > 0 }.maxOrNull() ?: 0
           cropTop = if (i == 0) {
             if (settings.removeStatusBar) {
-              maxOf(settings.statusBarHeightPx, detectedTopTrim).coerceAtMost(bmp.height / 4)
+              settings.statusBarHeightPx.coerceIn(0, bmp.height / 6)
             } else 0
           } else {
             val overlap = seamBefore?.totalOverlap ?: 0
